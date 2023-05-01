@@ -68,7 +68,7 @@ setup(
         "pycrypto",
         "Babel>=1.0",
         "cython>=0.14",
-        "SQLAlchemy==0.7.4",
+        "SQLAlchemy==1.3.0",
         "BeautifulSoup",
         "chardet",
         "psycopg2",

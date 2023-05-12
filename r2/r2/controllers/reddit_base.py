@@ -229,8 +229,7 @@ class UnloggedUser(FakeAccount):
         data = json.loads(json_blob)
         validated = {}
         for k, v in data.iteritems():
-            validator = self.allowed_prefs.get(k)
-            if validator:
+            if validator := self.allowed_prefs.get(k):
                 try:
                     validated[k] = validator(v)
                 except ValueError:
@@ -284,15 +283,12 @@ class UnloggedUser(FakeAccount):
 
 def read_user_cookie(name):
     uname = c.user.name if c.user_is_loggedin else ""
-    cookie_name = uname + '_' + name
-    if cookie_name in c.cookies:
-        return c.cookies[cookie_name].value
-    else:
-        return ''
+    cookie_name = f'{uname}_{name}'
+    return c.cookies[cookie_name].value if cookie_name in c.cookies else ''
 
 def set_user_cookie(name, val, **kwargs):
     uname = c.user.name if c.user_is_loggedin else ""
-    c.cookies[uname + '_' + name] = Cookie(value=val, **kwargs)
+    c.cookies[f'{uname}_{name}'] = Cookie(value=val, **kwargs)
 
 
 valid_click_cookie = fullname_regex(Link, True).match
@@ -301,8 +297,7 @@ def set_recent_clicks():
     if not c.user_is_loggedin:
         return
 
-    click_cookie = read_user_cookie('recentclicks2')
-    if click_cookie:
+    if click_cookie := read_user_cookie('recentclicks2'):
         if valid_click_cookie(click_cookie):
             names = [ x for x in UniqueIterator(click_cookie.split(',')) if x ]
 
@@ -330,13 +325,12 @@ def delete_obsolete_cookies():
 def over18():
     if c.user_is_loggedin:
         return c.user.pref_over_18 or c.user_is_admin
-    else:
-        if 'over18' in c.cookies:
-            cookie = c.cookies['over18'].value
-            if cookie == "1":
-                return True
-            else:
-                c.cookies["over18"] = Cookie(value="", expires=DELETE)
+    if 'over18' in c.cookies:
+        cookie = c.cookies['over18'].value
+        if cookie == "1":
+            return True
+        else:
+            c.cookies["over18"] = Cookie(value="", expires=DELETE)
 
 def set_obey_over18():
     "querystring parameter for API to obey over18 filtering rules"
@@ -353,14 +347,12 @@ def set_subreddit():
 
     c.site = Frontpage
     if not sr_name:
-        #check for cnames
-        cname = request.environ.get('legacy-cname')
-        if cname:
+        if cname := request.environ.get('legacy-cname'):
             sr = Subreddit._by_domain(cname) or Frontpage
             domain = g.domain
             if g.domain_prefix:
                 domain = ".".join((g.domain_prefix, domain))
-            path = 'http://%s%s' % (domain, sr.path)
+            path = f'http://{domain}{sr.path}'
             abort(301, location=BaseController.format_output_url(path))
     elif sr_name == 'r':
         #reddits
@@ -382,7 +374,7 @@ def set_subreddit():
                 found = {sr.name.lower() for sr in srs}
                 sr_names = filter(lambda name: name.lower() in found, sr_names)
                 sr_name = '+'.join(sr_names)
-                multi_path = '/r/' + sr_name
+                multi_path = f'/r/{sr_name}'
                 c.site = MultiReddit(multi_path, srs)
             elif not c.error_page:
                 abort(404)
@@ -395,24 +387,18 @@ def set_subreddit():
                           if not isinstance(sr, FakeSubreddit)]
 
         if base_sr == All:
-            if exclude_srs:
-                c.site = AllMinus(exclude_srs)
-            else:
-                c.site = All
+            c.site = AllMinus(exclude_srs) if exclude_srs else All
         elif base_sr == Mod:
-            if exclude_srs:
-                c.site = ModMinus(exclude_srs)
-            else:
-                c.site = Mod
+            c.site = ModMinus(exclude_srs) if exclude_srs else Mod
         else:
-            path = "/subreddits/search?q=%s" % sr_name
+            path = f"/subreddits/search?q={sr_name}"
             abort(302, location=BaseController.format_output_url(path))
     else:
         try:
             c.site = Subreddit._by_name(sr_name, stale=can_stale)
         except NotFound:
             if Subreddit.is_valid_name(sr_name):
-                path = "/subreddits/search?q=%s" % sr_name
+                path = f"/subreddits/search?q={sr_name}"
                 abort(302, location=BaseController.format_output_url(path))
             elif not c.error_page and not request.path.startswith("/api/login/") :
                 abort(404)
@@ -424,7 +410,7 @@ def set_subreddit():
             idna = _force_unicode(domain).encode("idna")
             if idna != domain:
                 path_info = request.environ["PATH_INFO"]
-                path = "/domain/%s%s" % (idna, path_info)
+                path = f"/domain/{idna}{path_info}"
                 abort(302, location=BaseController.format_output_url(path))
         except UnicodeError:
             domain = ''  # Ensure valid_ascii_domain fails
@@ -449,9 +435,11 @@ def set_multireddit():
         if c.user_is_loggedin and routes_dict.get("my_multi"):
             logged_in_username = c.user.name.lower()
             username = logged_in_username
-            multi_ids = ["/user/%s/m/%s" % (logged_in_username, multipath)
-                         for multipath in multipaths]
-            multiurl = "/me/m/" + fullpath
+            multi_ids = [
+                f"/user/{logged_in_username}/m/{multipath}"
+                for multipath in multipaths
+            ]
+            multiurl = f"/me/m/{fullpath}"
         elif "username" in routes_dict:
             username = routes_dict["username"].lower()
 
@@ -461,13 +449,12 @@ def set_multireddit():
                 if username == logged_in_username and not is_api():
                     # trim off multi id
                     url_parts = request.path_qs.split("/")[5:]
-                    url_parts.insert(0, "/me/m/%s" % fullpath)
+                    url_parts.insert(0, f"/me/m/{fullpath}")
                     path = "/".join(url_parts)
                     abort(302, location=BaseController.format_output_url(path))
 
-            multiurl = "/user/" + username + "/m/" + fullpath
-            multi_ids = ["/user/%s/m/%s" % (username, multipath)
-                        for multipath in multipaths]
+            multiurl = f"/user/{username}/m/{fullpath}"
+            multi_ids = [f"/user/{username}/m/{multipath}" for multipath in multipaths]
         elif 'sr_multi' in routes_dict:
             if isinstance(c.site, FakeSubreddit):
                 abort(404)
@@ -475,9 +462,8 @@ def set_multireddit():
                      not feature.is_enabled('multireddit_customizations')):
                 abort(404)
 
-            multiurl = "/r/" + c.site.name + "/m/" + fullpath
-            multi_ids = ["/r/%s/m/%s" % (c.site.name, multipath)
-                        for multipath in multipaths]
+            multiurl = f"/r/{c.site.name}/m/{fullpath}"
+            multi_ids = [f"/r/{c.site.name}/m/{multipath}" for multipath in multipaths]
 
         if multi_ids is not None:
             multis = LabeledMulti._byID(multi_ids, return_dict=False) or []
@@ -526,7 +512,7 @@ def set_content_type():
             def to_js(content):
                 # Add a comment to the beginning to prevent the "Rosetta Flash"
                 # XSS when an attacker controls the beginning of a resource
-                return "/**/" + wrapper + "(" + utils.string2js(content) + ");"
+                return f"/**/{wrapper}({utils.string2js(content)});"
 
             c.response_wrapper = to_js
         if ext in ("rss", "api", "json") and request.method.upper() == "GET":
@@ -543,9 +529,10 @@ def set_content_type():
                     c.render_style = "compact"
             except (ValueError, KeyError):
                 c.suggest_compact = True
-        if ext in ("mobile", "m", "compact"):
-            if request.GET.get("keep_extension"):
-                c.cookies['reddit_mobility'] = Cookie(ext, expires=NEVER)
+        if ext in ("mobile", "m", "compact") and request.GET.get(
+            "keep_extension"
+        ):
+            c.cookies['reddit_mobility'] = Cookie(ext, expires=NEVER)
     # allow JSONP requests to generate callbacks, but do not allow
     # the user to be logged in for these 
     callback = request.GET.get("jsonp")
@@ -560,8 +547,7 @@ def set_content_type():
 
 def get_browser_langs():
     browser_langs = []
-    langs = request.environ.get('HTTP_ACCEPT_LANGUAGE')
-    if langs:
+    if langs := request.environ.get('HTTP_ACCEPT_LANGUAGE'):
         langs = langs.split(',')
         browser_langs = []
         seen_langs = set()
@@ -623,7 +609,7 @@ def set_colors():
 def ratelimit_agent(agent, limit=10, slice_size=10):
     slice_size = min(slice_size, 60)
     time_slice = ratelimit.get_timeslice(slice_size)
-    usage = ratelimit.record_usage("rl-agent-" + agent, time_slice)
+    usage = ratelimit.record_usage(f"rl-agent-{agent}", time_slice)
     if usage > limit:
         request.environ['retry_after'] = time_slice.remaining
         abort(429)
@@ -636,9 +622,7 @@ def ratelimit_agents():
     if not user_agent:
         return
 
-    # parse out the appid for appengine apps
-    appengine_match = appengine_re.search(user_agent)
-    if appengine_match:
+    if appengine_match := appengine_re.search(user_agent):
         appid = appengine_match.group(1)
         ratelimit_agent(appid)
         return
@@ -725,7 +709,7 @@ def cross_domain(origin_check=is_trusted_origin, **options):
                 if cors_perms["origin_check"](g.origin):
                     name = request.environ["pylons.routes_dict"]["action_name"]
                     resp = fn(self, *args, **kwargs)
-                    c.cookies.add('hoist_%s' % name, ''.join(tup(resp)))
+                    c.cookies.add(f'hoist_{name}', ''.join(tup(resp)))
                     response.content_type = 'text/html'
                     return ""
                 else:
@@ -736,6 +720,7 @@ def cross_domain(origin_check=is_trusted_origin, **options):
 
         cross_domain_handler.cors_perms = cors_perms
         return cross_domain_handler
+
     return cross_domain_wrap
 
 
@@ -761,7 +746,7 @@ def hsts_eligible():
 
 
 def hsts_modify_redirect(url):
-    hsts_url = UrlParser("https://" + g.domain + "/modify_hsts_grant")
+    hsts_url = UrlParser(f"https://{g.domain}/modify_hsts_grant")
     # `dest` should be fully qualified so users get sent back to the right
     # subdomain. `dest` must also be HTTPS because Safari will crash if
     # you redirect to an http: URL after giving a grant.
@@ -831,12 +816,9 @@ def enforce_https():
                 redirect_url = make_url_https(request.environ['FULLPATH'])
         else:
             grant = 0
-            if c.secure:
-                # User disabled HTTPS forcing under another session or their
-                # session became invalid and they're left with a dangling cookie
-                if have_secure_session_cookie():
-                    change_user_cookie_security(False)
-                    need_grant = True
+            if c.secure and have_secure_session_cookie():
+                change_user_cookie_security(False)
+                need_grant = True
 
     if feature.is_enabled("give_hsts_grants") and grant is not None:
         if request.host == g.domain and c.secure:
@@ -872,7 +854,7 @@ def change_user_cookie_security(secure, rem=True):
     if not c.user_is_loggedin:
         return
 
-    user_prefix = c.user.name + "_"
+    user_prefix = f"{c.user.name}_"
     securable = (PRIVATE_SESSION_COOKIES +
                  [user_prefix + c_name for c_name in PRIVATE_USER_COOKIES])
     for name, cookie in c.cookies.iteritems():
@@ -921,7 +903,7 @@ def disable_subreddit_css():
 
 
 def request_timer_name(action):
-    return "service_time.web." + action
+    return f"service_time.web.{action}"
 
 
 def flatten_response(content):
@@ -932,15 +914,15 @@ def flatten_response(content):
 
 
 def abort_with_error(error, code=None):
-    if not code and not error.code:
+    if code or error.code:
+        abort(reddit_http_error(
+            code=code or error.code,
+            error_name=error.name,
+            explanation=error.message,
+            fields=error.fields,
+        ))
+    else:
         raise ValueError('Error %r missing status code' % error)
-
-    abort(reddit_http_error(
-        code=code or error.code,
-        error_name=error.name,
-        explanation=error.message,
-        fields=error.fields,
-    ))
 
 
 class MinimalController(BaseController):
@@ -957,11 +939,7 @@ class MinimalController(BaseController):
         except CookieError:
             cookies_key = ''
 
-        if request.host != g.media_domain:
-            location = get_request_location()
-        else:
-            location = None
-
+        location = get_request_location() if request.host != g.media_domain else None
         return make_key('request',
                         c.lang,
                         request.host,
@@ -1005,7 +983,7 @@ class MinimalController(BaseController):
             # Convert client_id to ascii str for use as memcache key
             client_id = c.oauth2_access_token.client_id.encode("ascii")
             # OAuth2 ratelimits are per user-app combination
-            key = 'siterl-oauth-' + c.user._id36 + ":" + client_id
+            key = f'siterl-oauth-{c.user._id36}:{client_id}'
         elif c.cdn_cacheable:
             type_ = "cdn"
         elif not is_api():
@@ -1015,7 +993,7 @@ class MinimalController(BaseController):
             max_reqs = g.RL_MAX_REQS
             period = g.RL_RESET_SECONDS
             # API (non-oauth) limits are per-ip
-            key = 'siterl-api-' + request.ip
+            key = f'siterl-api-{request.ip}'
         else:
             type_ = "none"
 
@@ -1058,12 +1036,11 @@ class MinimalController(BaseController):
             g.stats.event_count("ratelimit.exceeded", "close")
 
     def pre(self):
-        action = request.environ["pylons.routes_dict"].get("action")
-        if action:
+        if action := request.environ["pylons.routes_dict"].get("action"):
             if not self._get_action_handler():
                 action = 'invalid'
             controller = request.environ["pylons.routes_dict"]["controller"]
-            key = "{}.{}".format(controller, action)
+            key = f"{controller}.{action}"
             c.request_timer = g.stats.get_timer(request_timer_name(key))
         else:
             c.request_timer = SimpleSillyStub()
@@ -1347,11 +1324,10 @@ class MinimalController(BaseController):
         """Redirect to `dest` via the HSTS grant endpoint"""
         if is_hsts_eligible is None:
             is_hsts_eligible = hsts_eligible()
-        if is_hsts_eligible:
-            dest = hsts_modify_redirect(dest)
-            return cls.redirect(dest, preserve_extension=False)
-        else:
+        if not is_hsts_eligible:
             return cls.redirect(dest)
+        dest = hsts_modify_redirect(dest)
+        return cls.redirect(dest, preserve_extension=False)
 
 
 class OAuth2ResourceController(MinimalController):
@@ -1381,8 +1357,7 @@ class OAuth2ResourceController(MinimalController):
         except RequirementException:
             self._auth_error(401, "invalid_token")
 
-        handler = self._get_action_handler()
-        if handler:
+        if handler := self._get_action_handler():
             oauth2_perms = getattr(handler, "oauth2_perms", {})
             if oauth2_perms.get("oauth2_allowed", False):
                 grant = OAuth2Scope(access_token.scope)
@@ -1398,7 +1373,12 @@ class OAuth2ResourceController(MinimalController):
             self.authenticate_with_token()
 
     def _auth_error(self, code, error):
-        abort(code, headers=[("WWW-Authenticate", 'Bearer realm="reddit", error="%s"' % error)])
+        abort(
+            code,
+            headers=[
+                ("WWW-Authenticate", f'Bearer realm="reddit", error="{error}"')
+            ],
+        )
 
     def _get_bearer_token(self, strict=True):
         auth = request.headers.get("Authorization")

@@ -31,7 +31,7 @@ HADOOP_FOLDER_SUFFIX = '_$folder$'
 def _to_path(bucket, key):
     if not bucket:
         raise ValueError
-    return 's3://%s/%s' % (bucket, key)
+    return f's3://{bucket}/{key}'
 
 
 def _from_path(path):
@@ -42,7 +42,7 @@ def _from_path(path):
     """
 
     if not path.startswith('s3://'):
-        raise ValueError('Bad S3 path %s' % path)
+        raise ValueError(f'Bad S3 path {path}')
 
     r = path[len('s3://'):].split('/', 1)
     bucket = key = None
@@ -53,7 +53,7 @@ def _from_path(path):
         bucket = r[0]
 
     if not bucket:
-        raise ValueError('Bad S3 path %s' % path)
+        raise ValueError(f'Bad S3 path {path}')
 
     return bucket, key
 
@@ -64,8 +64,7 @@ def get_text_from_s3(s3_connection, path):
     bucket = s3_connection.get_bucket(bucket_name)
     k = Key(bucket)
     k.key = key_name
-    txt = k.get_contents_as_string()
-    return txt
+    return k.get_contents_as_string()
 
 
 def mv_file_s3(s3_connection, src_path, dst_path):

@@ -51,12 +51,10 @@ def get_engine(name, db_host='', db_user='', db_pass='', db_port='5432',
     dsn = "%20".join("%s=%s" % x for x in arguments.iteritems())
 
     engine = sqlalchemy.create_engine(
-        'postgresql:///?dsn=' + dsn,
+        f'postgresql:///?dsn={dsn}',
         strategy='threadlocal',
         pool_size=int(pool_size),
         max_overflow=int(max_overflow),
-        # our code isn't ready for unicode to appear
-        # in place of strings yet
         use_native_unicode=False,
     )
 
@@ -133,6 +131,4 @@ class db_manager:
         return [self._engines[name] for name in names if name in self._engines]
 
     def get_read_table(self, tables):
-        if len(tables) == 1:
-            return tables[0]
-        return  random.choice(list(tables))
+        return tables[0] if len(tables) == 1 else random.choice(list(tables))

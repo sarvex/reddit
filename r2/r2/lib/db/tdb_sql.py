@@ -114,24 +114,19 @@ def make_metadata(engine):
 
 def create_table(table, index_commands=None):
     t = table
-    if g.db_create_tables:
-        #@@hackish?
-        if not t.bind.has_table(t.name):
-            t.create(checkfirst = False)
-            if index_commands:
-                for i in index_commands:
-                    t.bind.execute(i)
+    if g.db_create_tables and not t.bind.has_table(t.name):
+        t.create(checkfirst = False)
+        if index_commands:
+            for i in index_commands:
+                t.bind.execute(i)
 
 def index_str(table, name, on, where = None, unique = False):
-    if unique:
-        index_str = 'create unique index'
-    else:
-        index_str = 'create index'
-    index_str += ' idx_%s_' % name
+    index_str = 'create unique index' if unique else 'create index'
+    index_str += f' idx_{name}_'
     index_str += table.name
-    index_str += ' on '+ table.name + ' (%s)' % on
+    index_str += f' on {table.name}' + f' ({on})'
     if where:
-        index_str += ' where %s' % where
+        index_str += f' where {where}'
     return index_str
 
 
@@ -173,61 +168,68 @@ def index_commands(table, type):
     return commands
 
 def get_type_table(metadata):
-    table = sa.Table(g.db_app_name + '_type', metadata,
-                     sa.Column('id', sa.Integer, primary_key = True),
-                     sa.Column('name', sa.String, nullable = False))
-    return table
+    return sa.Table(
+        f'{g.db_app_name}_type',
+        metadata,
+        sa.Column('id', sa.Integer, primary_key=True),
+        sa.Column('name', sa.String, nullable=False),
+    )
 
 def get_rel_type_table(metadata):
-    table = sa.Table(g.db_app_name + '_type_rel', metadata,
-                     sa.Column('id', sa.Integer, primary_key = True),
-                     sa.Column('type1_id', sa.Integer, nullable = False),
-                     sa.Column('type2_id', sa.Integer, nullable = False),
-                     sa.Column('name', sa.String, nullable = False))
-    return table
+    return sa.Table(
+        f'{g.db_app_name}_type_rel',
+        metadata,
+        sa.Column('id', sa.Integer, primary_key=True),
+        sa.Column('type1_id', sa.Integer, nullable=False),
+        sa.Column('type2_id', sa.Integer, nullable=False),
+        sa.Column('name', sa.String, nullable=False),
+    )
 
 def get_thing_table(metadata, name):
-    table = sa.Table(g.db_app_name + '_thing_' + name, metadata,
-                     sa.Column('thing_id', sa.BigInteger, primary_key = True),
-                     sa.Column('ups', sa.Integer, default = 0, nullable = False),
-                     sa.Column('downs',
-                               sa.Integer,
-                               default = 0,
-                               nullable = False),
-                     sa.Column('deleted',
-                               sa.Boolean,
-                               default = False,
-                               nullable = False),
-                     sa.Column('spam',
-                               sa.Boolean,
-                               default = False,
-                               nullable = False),
-                     sa.Column('date',
-                               sa.DateTime(timezone = True),
-                               default = sa.func.now(),
-                               nullable = False))
+    table = sa.Table(
+        f'{g.db_app_name}_thing_{name}',
+        metadata,
+        sa.Column('thing_id', sa.BigInteger, primary_key=True),
+        sa.Column('ups', sa.Integer, default=0, nullable=False),
+        sa.Column('downs', sa.Integer, default=0, nullable=False),
+        sa.Column('deleted', sa.Boolean, default=False, nullable=False),
+        sa.Column('spam', sa.Boolean, default=False, nullable=False),
+        sa.Column(
+            'date',
+            sa.DateTime(timezone=True),
+            default=sa.func.now(),
+            nullable=False,
+        ),
+    )
     table.thing_name = name
     return table
 
 def get_data_table(metadata, name):
-    data_table = sa.Table(g.db_app_name + '_data_' + name, metadata,
-                          sa.Column('thing_id', sa.BigInteger, nullable = False,
-                                    primary_key = True),
-                          sa.Column('key', sa.String, nullable = False,
-                                    primary_key = True),
-                          sa.Column('value', sa.String),
-                          sa.Column('kind', sa.String))
-    return data_table
+    return sa.Table(
+        f'{g.db_app_name}_data_{name}',
+        metadata,
+        sa.Column('thing_id', sa.BigInteger, nullable=False, primary_key=True),
+        sa.Column('key', sa.String, nullable=False, primary_key=True),
+        sa.Column('value', sa.String),
+        sa.Column('kind', sa.String),
+    )
 
 def get_rel_table(metadata, name):
-    rel_table = sa.Table(g.db_app_name + '_rel_' + name, metadata,
-                         sa.Column('rel_id', sa.BigInteger, primary_key = True),
-                         sa.Column('thing1_id', sa.BigInteger, nullable = False),
-                         sa.Column('thing2_id', sa.BigInteger, nullable = False),
-                         sa.Column('name', sa.String, nullable = False),
-                         sa.Column('date', sa.DateTime(timezone = True),
-                                   default = sa.func.now(), nullable = False),
-                         sa.UniqueConstraint('thing1_id', 'thing2_id', 'name'))
+    rel_table = sa.Table(
+        f'{g.db_app_name}_rel_{name}',
+        metadata,
+        sa.Column('rel_id', sa.BigInteger, primary_key=True),
+        sa.Column('thing1_id', sa.BigInteger, nullable=False),
+        sa.Column('thing2_id', sa.BigInteger, nullable=False),
+        sa.Column('name', sa.String, nullable=False),
+        sa.Column(
+            'date',
+            sa.DateTime(timezone=True),
+            default=sa.func.now(),
+            nullable=False,
+        ),
+        sa.UniqueConstraint('thing1_id', 'thing2_id', 'name'),
+    )
     rel_table.rel_name = name
     return rel_table
 
@@ -263,15 +265,13 @@ def check_type(table, name, insert_vals):
         return type_id
     elif len(predefined_type_ids) > 0:
         # flip the hell out if only *some* of the type ids are defined
-        raise ConfigurationError("Expected typeid for %s" % name)
+        raise ConfigurationError(f"Expected typeid for {name}")
 
-    # check for type in type table, create if not existent
-    r = table.select(table.c.name == name).execute().fetchone()
-    if not r:
+    if r := table.select(table.c.name == name).execute().fetchone():
+        type_id = r.id
+    else:
         r = table.insert().execute(**insert_vals)
         type_id = r.inserted_primary_key[0]
-    else:
-        type_id = r.id
     return type_id
 
 #make the thing tables
@@ -333,7 +333,7 @@ def build_rel_tables():
                 rel_t2_table = get_thing_table(metadata, type2_name)
 
             #build the data
-            rel_data_table = get_data_table(metadata, 'rel_' + name)
+            rel_data_table = get_data_table(metadata, f'rel_{name}')
             create_table(rel_data_table,
                          index_commands(rel_data_table, 'data'))
 
@@ -390,24 +390,28 @@ def get_table(kind, action, tables, avoid_master_reads = False):
 
         return get_write_table(tables)
     elif action == 'read':
-        #check to see if we're supposed to use the write db again
         if c.use_write_db and c.use_write_db.has_key(kind):
             return get_write_table(tables)
-        else:
-            if avoid_master_reads and len(tables) > 1:
-                return dbm.get_read_table(tables[1:])
-            return dbm.get_read_table(tables)
+        if avoid_master_reads and len(tables) > 1:
+            return dbm.get_read_table(tables[1:])
+        return dbm.get_read_table(tables)
 
 
 def get_thing_table(type_id, action = 'read' ):
-    return get_table('t' + str(type_id), action,
-                     types_id[type_id].tables,
-                     avoid_master_reads = types_id[type_id].avoid_master_reads)
+    return get_table(
+        f't{str(type_id)}',
+        action,
+        types_id[type_id].tables,
+        avoid_master_reads=types_id[type_id].avoid_master_reads,
+    )
 
 def get_rel_table(rel_type_id, action = 'read'):
-    return get_table('r' + str(rel_type_id), action,
-                     rel_types_id[rel_type_id].tables,
-                     avoid_master_reads = rel_types_id[rel_type_id].avoid_master_reads)
+    return get_table(
+        f'r{str(rel_type_id)}',
+        action,
+        rel_types_id[rel_type_id].tables,
+        avoid_master_reads=rel_types_id[rel_type_id].avoid_master_reads,
+    )
 
 
 #TODO does the type actually exist?
@@ -452,7 +456,7 @@ def set_thing_props(type_id, thing_id, **props):
     #use real columns
     def do_update(t):
         transactions.add_engine(t.bind)
-        new_props = dict((t.c[prop], val) for prop, val in props.iteritems())
+        new_props = {t.c[prop]: val for prop, val in props.iteritems()}
         u = t.update(t.c.thing_id == thing_id, values = new_props)
         u.execute()
 
@@ -500,7 +504,7 @@ def set_rel_props(rel_type_id, rel_id, **props):
 
     #use real columns
     transactions.add_engine(t.bind)
-    new_props = dict((t.c[prop], val) for prop, val in props.iteritems())
+    new_props = {t.c[prop]: val for prop, val in props.iteritems()}
     u = t.update(t.c.rel_id == rel_id, values = new_props)
     u.execute()
 
@@ -519,14 +523,11 @@ def py2db(val, return_kind=False):
         kind = 'pickle'
         val = pickle.dumps(val)
 
-    if return_kind:
-        return (val, kind)
-    else:
-        return val
+    return (val, kind) if return_kind else val
 
 def db2py(val, kind):
     if kind == 'bool':
-        val = True if val is 't' else False
+        val = val is 't'
     elif kind == 'num':
         try:
             val = int(val)
@@ -610,9 +611,10 @@ def get_data(table, thing_id):
         val = db2py(row.value, row.kind)
         stor = res if single else res.setdefault(row.thing_id, storage())
         if single and row.thing_id != thing_id:
-            raise ValueError, ("tdb_sql.py: there's shit in the plumbing." 
-                               + " got %s, wanted %s" % (row.thing_id,
-                                                         thing_id))
+            raise (
+                ValueError,
+                f"tdb_sql.py: there's shit in the plumbing. got {row.thing_id}, wanted {thing_id}",
+            )
         stor[row.key] = val
 
     return res
@@ -649,9 +651,10 @@ def get_thing(type_id, thing_id):
             res = stor
             # check that we got what we asked for
             if row.thing_id != thing_id:
-                raise ValueError, ("tdb_sql.py: there's shit in the plumbing." 
-                                    + " got %s, wanted %s" % (row.thing_id,
-                                                              thing_id))
+                raise (
+                    ValueError,
+                    f"tdb_sql.py: there's shit in the plumbing. got {row.thing_id}, wanted {thing_id}",
+                )
         else:
             res[row.thing_id] = stor
     return res
@@ -726,10 +729,7 @@ def sa_op(op):
 
     rval = tup(op.rval)
 
-    if not rval:
-        return '2+2=5'
-    else:
-        return sa.or_(*[fn(op.lval, v) for v in rval])
+    return '2+2=5' if not rval else sa.or_(*[fn(op.lval, v) for v in rval])
 
 def translate_sort(table, column_name, lval = None, rewrite_name = True):
     if isinstance(lval, operators.query_func):
@@ -800,7 +800,7 @@ def add_sort(sort, t_table, select):
 
 def translate_thing_value(rval):
     if isinstance(rval, operators.timeago):
-        return sa.text("current_timestamp - interval '%s'" % rval.interval)
+        return sa.text(f"current_timestamp - interval '{rval.interval}'")
     else:
         return rval
 
@@ -840,15 +840,15 @@ def find_things(type_id, get_cols, sort, limit, offset, constraints):
 
 def translate_data_value(alias, op):
     lval = op.lval
-    need_substr = False if isinstance(lval, operators.query_func) else True
+    need_substr = not isinstance(lval, operators.query_func)
     lval = translate_sort(alias, 'value', lval, False)
 
     #add the substring func
     if need_substr:
         lval = sa.func.substring(lval, 1, max_val_len)
-    
+
     op.lval = lval
-        
+
     #convert the rval to db types
     #convert everything to strings for pg8.3
     op.rval = tuple(str(py2db(v)) for v in tup(op.rval))

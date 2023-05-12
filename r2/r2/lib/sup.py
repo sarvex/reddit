@@ -40,10 +40,10 @@ def sup_url():
     return 'http://%s/sup.json' % get_domain(subreddit = False)
 
 def period_urls():
-    return dict((p, sup_url() + "?seconds=" + str(p)) for p in PERIODS)
+    return {p: f"{sup_url()}?seconds={str(p)}" for p in PERIODS}
 
 def cache_key(ts):
-    return 'sup_' + str(ts)
+    return f'sup_{str(ts)}'
 
 def make_cur_time(period):
     t = int(time.time())
@@ -60,7 +60,7 @@ def make_sup_id(user, action):
 def add_update(user, action):
     update_time = int(time.time())
     sup_id = make_sup_id(user, action)
-    supdate = ',%s:%s' % (sup_id, update_time)
+    supdate = f',{sup_id}:{update_time}'
 
     key = cache_key(make_cur_time(MIN_PERIOD))
     g.cache.add(key, '')
@@ -104,7 +104,7 @@ def sup_json(period):
 
 def set_sup_header(user, action):
     sup_id = make_sup_id(user, action)
-    response.headers['x-sup-id'] = sup_url() + '#' + sup_id
+    response.headers['x-sup-id'] = f'{sup_url()}#{sup_id}'
 
 def set_expires_header():
     seconds = make_cur_time(MIN_PERIOD) + MIN_PERIOD

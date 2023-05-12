@@ -104,36 +104,32 @@ class WikiBasePage(Reddit):
             pageactions += [(page, _("view"), False)]
             if may_revise:
                 pageactions += [('edit', _("edit"), True)]
-            pageactions += [('revisions/%s' % page, _("history"), False)]
+            pageactions += [(f'revisions/{page}', _("history"), False)]
             pageactions += [('discussions', _("talk"), True)]
             if c.is_wiki_mod and may_revise:
                 pageactions += [('settings', _("settings"), True)]
 
         action = context.get('wikiaction', (page, 'wiki'))
-        
+
         if alert:
             context['infotext'] = alert
         elif c.wikidisabled:
             context['infotext'] = _("this wiki is currently disabled, only mods may interact with this wiki")
-        
+
         self.pageactions = pageactions
         self.page = page
         self.base_url = c.wiki_base_url
         self.action = action
         self.description = description
-        
-        if showtitle:
-            self.pagetitle = action[1]
-        else:
-            self.pagetitle = None
 
+        self.pagetitle = action[1] if showtitle else None
         page_classes = None
 
         if page and "title" not in context:
             context["title"] = _("%(page)s - %(site)s") % {
                 "site": c.site.name,
                 "page": page}
-            page_classes = ['wiki-page-%s' % page.replace('/', '-')]
+            page_classes = [f"wiki-page-{page.replace('/', '-')}"]
 
         Reddit.__init__(self, extra_js_config={'wiki_page': page}, 
                         show_wiki_actions=True, page_classes=page_classes,
@@ -145,9 +141,8 @@ class WikiBasePage(Reddit):
 class WikiPageView(WikiBasePage):
     def __init__(self, content, page, diff=None, renderer='wiki', **context):
         may_revise = context.get('may_revise')
-        if not content and not context.get('alert'):
-            if may_revise:
-                context['alert'] = _("this page is empty, edit it to add some content.")
+        if not content and not context.get('alert') and may_revise:
+            context['alert'] = _("this page is empty, edit it to add some content.")
         content = WikiView(content, context.get('edit_by'), context.get('edit_date'), 
                            may_revise=may_revise, page=page, diff=diff, renderer=renderer)
         WikiBasePage.__init__(self, content, page=page, **context)
@@ -183,7 +178,7 @@ class WikiSettings(WikiBasePage):
 class WikiRevisions(WikiBasePage):
     def __init__(self, revisions, page, **context):
         content = WikiPageRevisions(revisions, page)
-        context['wikiaction'] = ('revisions/%s' % page, _("revisions"))
+        context['wikiaction'] = f'revisions/{page}', _("revisions")
         WikiBasePage.__init__(self, content, page=page, **context)
 
 class WikiRecent(WikiBasePage):

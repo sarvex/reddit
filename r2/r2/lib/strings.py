@@ -250,13 +250,11 @@ class PluralManager(object):
             to_func = True
 
         attr = attr.replace("_", " ")
+        rval = self.string_dict[attr]
         if to_func:
-            rval = self.string_dict[attr]
             return lambda x: ungettext(rval[0], rval[1], x)
-        else:
-            rval = self.string_dict[attr]
-            n = 1 if attr == rval[0] else 5
-            return ungettext(rval[0], rval[1], n)
+        n = 1 if attr == rval[0] else 5
+        return ungettext(rval[0], rval[1], n)
 
 plurals = PluralManager([P_("comment",     "comments"),
                          P_("point",       "points"),
@@ -370,7 +368,7 @@ class RandomString(object):
         < self.num, the entries are guaranteed to be unique."""
         l = []
         possible = []
-        for x in range(max(quantity, 1)):
+        for _ in range(max(quantity, 1)):
             if not possible:
                 possible = range(self.num)
             irand = random.choice(possible)

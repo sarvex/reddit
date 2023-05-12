@@ -85,9 +85,7 @@ class GzipMiddleware(object):
         the content-length.
 
         """
-        content_length_header = headers["Content-Length"]
-
-        if content_length_header:
+        if content_length_header := headers["Content-Length"]:
             return int(content_length_header)
 
         try:
@@ -95,9 +93,7 @@ class GzipMiddleware(object):
         except ValueError:
             return None  # streaming response; we're done here.
 
-        if app_iter_len == 1:
-            return len(app_iter[0])
-        return None
+        return len(app_iter[0]) if app_iter_len == 1 else None
 
     def should_gzip_response(self, headers, app_iter):
         # this middleware isn't smart enough to deal with stuff like ETags or
@@ -120,10 +116,7 @@ class GzipMiddleware(object):
         # make sure this is one of the content-types we're allowed to encode
         content_type = headers["Content-Type"]
         type, subtype, params = parse_mime_type(content_type)
-        if "%s/%s" % (type, subtype) not in ENCODABLE_CONTENT_TYPES:
-            return False
-
-        return True
+        return f"{type}/{subtype}" in ENCODABLE_CONTENT_TYPES
 
     @staticmethod
     def update_vary_header(headers):

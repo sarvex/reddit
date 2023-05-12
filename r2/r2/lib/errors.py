@@ -162,7 +162,7 @@ error_list = dict((
         ('CANT_CREATE_SR', _("your account is too new to create a subreddit. please contact the admins to request an exemption.")),
     ))
 
-errors = Storage([(e, e) for e in error_list.keys()])
+errors = Storage([(e, e) for e in error_list])
 
 
 def add_error_codes(new_codes):
@@ -207,7 +207,7 @@ class RedditError(Exception):
         yield ('message', _(self.message))
 
     def __repr__(self):
-        return '<RedditError: %s>' % self.name
+        return f'<RedditError: {self.name}>'
 
     def __str__(self):
         return repr(self)
@@ -229,19 +229,17 @@ class ErrorSet(object):
         error = None
 
         for error_name in error_names:
-            error = self.get((error_name, field_name))
-            if error:
+            if error := self.get((error_name, field_name)):
                 return error
 
     def __getitem__(self, name):
         return self.errors[name]
 
     def __repr__(self):
-        return "<ErrorSet %s>" % list(self)
+        return f"<ErrorSet {list(self)}>"
 
     def __iter__(self):
-        for x in self.errors:
-            yield x
+        yield from self.errors
 
     def __len__(self):
         return len(self.errors)

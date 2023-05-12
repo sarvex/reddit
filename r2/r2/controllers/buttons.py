@@ -44,19 +44,14 @@ class ButtonsController(RedditController):
 
             if links:
                 kw = {}
-                if wrapper:
-                    links = wrap_links(links, wrapper = wrapper)
-                else:
-                    links = wrap_links(links)
+                links = wrap_links(links, wrapper = wrapper) if wrapper else wrap_links(links)
                 links = list(links)
                 links = max(links, key = lambda x: x._score) if links else None
-            if not links and wrapper:
-                return wrapper(None)
-            return links
-            # note: even if _by_url successed or a link was passed in,
-            # it is possible link_listing.things is empty if the
-            # link(s) is/are members of a private reddit
-            # return the link with the highest score (if more than 1)
+            return wrapper(None) if not links and wrapper else links
+                # note: even if _by_url successed or a link was passed in,
+                # it is possible link_listing.things is empty if the
+                # link(s) is/are members of a private reddit
+                # return the link with the highest score (if more than 1)
         except:
             #we don't want to return 500s in other people's pages.
             import traceback
@@ -70,8 +65,7 @@ class ButtonsController(RedditController):
         if not buttontype:
             abort(404)
 
-        return self.redirect('/static/button/button%s.js' % buttontype,
-                             code=301)
+        return self.redirect(f'/static/button/button{buttontype}.js', code=301)
 
     @validate(buttonimage = VInt('i', 0, 14),
               title = nop('title'),

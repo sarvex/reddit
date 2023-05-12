@@ -38,10 +38,10 @@ from r2.models.wiki import ImagesByWikiPage
 
 
 def make_typename(typ):
-    return 't%s' % to36(typ._type_id)
+    return f't{to36(typ._type_id)}'
 
 def make_fullname(typ, _id):
-    return '%s_%s' % (make_typename(typ), to36(_id))
+    return f'{make_typename(typ)}_{to36(_id)}'
 
 
 class ObjectTemplate(StringTemplate):
@@ -53,13 +53,14 @@ class ObjectTemplate(StringTemplate):
             if isinstance(obj, (str, unicode)):
                 return StringTemplate(obj).finalize(kw)
             elif isinstance(obj, dict):
-                return dict((k, _update(v)) for k, v in obj.iteritems())
+                return {k: _update(v) for k, v in obj.iteritems()}
             elif isinstance(obj, (list, tuple)):
                 return map(_update, obj)
             elif isinstance(obj, CacheStub) and kw.has_key(obj.name):
                 return kw[obj.name]
             else:
                 return obj
+
         res = _update(self.d)
         return ObjectTemplate(res)
 
@@ -112,17 +113,16 @@ class ThingJsonTemplate(JsonTemplate):
          * content : rendered  representation of the thing by
            calling render on it using the style of get_api_subtype().
         """
-        res =  dict(id = thing._fullname,
-                    content = thing.render(style=get_api_subtype()))
-        return res
+        return dict(
+            id=thing._fullname, content=thing.render(style=get_api_subtype())
+        )
         
     def raw_data(self, thing):
         """
         Complement to rendered_data.  Called when a dictionary of
         thing data attributes is to be sent across the wire.
         """
-        return dict((k, self.thing_attr(thing, v))
-                    for k, v in self._data_attrs_.iteritems())
+        return {k: self.thing_attr(thing, v) for k, v in self._data_attrs_.iteritems()}
             
     def thing_attr(self, thing, attr):
         """
@@ -132,25 +132,19 @@ class ThingJsonTemplate(JsonTemplate):
         things).
         """
         if attr == "author":
-            if thing.author._deleted:
-                return "[deleted]"
-            return thing.author.name
+            return "[deleted]" if thing.author._deleted else thing.author.name
         if attr == "author_flair_text":
             if thing.author._deleted:
                 return None
             if thing.author.flair_enabled_in_sr(thing.subreddit._id):
-                return getattr(thing.author,
-                               'flair_%s_text' % (thing.subreddit._id),
-                               None)
+                return getattr(thing.author, f'flair_{thing.subreddit._id}_text', None)
             else:
                 return None
         if attr == "author_flair_css_class":
             if thing.author._deleted:
                 return None
             if thing.author.flair_enabled_in_sr(thing.subreddit._id):
-                return getattr(thing.author,
-                               'flair_%s_css_class' % (thing.subreddit._id),
-                               None)
+                return getattr(thing.author, f'flair_{thing.subreddit._id}_css_class', None)
             else:
                 return None
         elif attr == "created":
@@ -167,33 +161,30 @@ class ThingJsonTemplate(JsonTemplate):
 
         if attr == 'distinguished':
             distinguished = getattr(thing, attr, 'no')
-            if distinguished == 'no':
-                return None
-            return distinguished
-        
-        if attr in ["num_reports", "report_reasons", "banned_by", "approved_by"]:
-            if c.user_is_loggedin and thing.subreddit.is_moderator(c.user):
-                if attr == "num_reports":
-                    return thing.reported
-                elif attr == "report_reasons":
-                    return Report.get_reasons(thing)
+            return None if distinguished == 'no' else distinguished
+        if (
+            attr in ["num_reports", "report_reasons", "banned_by", "approved_by"]
+            and c.user_is_loggedin
+            and thing.subreddit.is_moderator(c.user)
+        ):
+            if attr == "num_reports":
+                return thing.reported
+            elif attr == "report_reasons":
+                return Report.get_reasons(thing)
 
-                ban_info = getattr(thing, "ban_info", {})
-                if attr == "banned_by":
-                    banner = (ban_info.get("banner")
-                              if ban_info.get('moderator_banned')
-                              else True)
-                    return banner if thing._spam else None
-                elif attr == "approved_by":
-                    return ban_info.get("unbanner") if not thing._spam else None
+            ban_info = getattr(thing, "ban_info", {})
+            if attr == "approved_by":
+                return ban_info.get("unbanner") if not thing._spam else None
 
+            elif attr == "banned_by":
+                banner = (ban_info.get("banner")
+                          if ban_info.get('moderator_banned')
+                          else True)
+                return banner if thing._spam else None
         return getattr(thing, attr, None)
 
     def data(self, thing):
-        if get_api_subtype():
-            return self.rendered_data(thing)
-        else:
-            return self.raw_data(thing)
+        return self.rendered_data(thing) if get_api_subtype() else self.raw_data(thing)
 
     def render(self, thing = None, action = None, *a, **kw):
         return ObjectTemplate(dict(kind = self.kind(thing),
@@ -267,8 +258,7 @@ class SubredditJsonTemplate(ThingJsonTemplate):
             for attr in ('community_rules', 'key_color', 'related_subreddits'):
                 data[attr] = self.thing_attr(thing, attr)
 
-        permissions = getattr(thing, 'mod_permissions', None)
-        if permissions:
+        if permissions := getattr(thing, 'mod_permissions', None):
             permissions = [perm for perm, has in permissions.iteritems() if has]
             data['mod_permissions'] = permissions
 
@@ -280,7 +270,6 @@ class SubredditJsonTemplate(ThingJsonTemplate):
 
         if attr == "_ups" and thing.hide_subscribers:
             return 0
-        # Don't return accounts_active counts in /subreddits
         elif (attr == "accounts_active" and isinstance(c.site, SubSR)):
             return None
         elif attr == 'description_html':
@@ -296,9 +285,7 @@ class SubredditJsonTemplate(ThingJsonTemplate):
         elif attr == 'submit_text_html':
             return safemarkdown(thing.submit_text)
         elif attr == 'community_rules':
-            if thing.community_rules:
-                return thing.community_rules.split('\n')
-            return []
+            return thing.community_rules.split('\n') if thing.community_rules else []
         else:
             return ThingJsonTemplate.thing_attr(self, thing, attr)
 
@@ -314,9 +301,7 @@ class LabeledMultiDescriptionJsonTemplate(ThingJsonTemplate):
 
     def thing_attr(self, thing, attr):
         if attr == "description_html":
-            # if safemarkdown is passed a falsy string it returns None :/
-            description_html = safemarkdown(thing.description_md) or ''
-            return description_html
+            return safemarkdown(thing.description_md) or ''
         else:
             return ThingJsonTemplate.thing_attr(self, thing, attr)
 
@@ -360,10 +345,7 @@ class LabeledMultiJsonTemplate(LabeledMultiDescriptionJsonTemplate):
         elif attr == "can_edit":
             return c.user_is_loggedin and thing.can_edit(c.user)
         elif attr == "copied_from":
-            if thing.can_edit(c.user):
-                return thing.copied_from
-            else:
-                return None
+            return thing.copied_from if thing.can_edit(c.user) else None
         elif attr == "display_name":
             return thing.display_name or thing.name
         else:
@@ -529,8 +511,7 @@ class LinkJsonTemplate(ThingJsonTemplate):
         if attr in ("media_embed", "secure_media_embed"):
             media_object = getattr(thing, attr.replace("_embed", "_object"))
             if media_object and not isinstance(media_object, basestring):
-                media_embed = get_media_embed(media_object)
-                if media_embed:
+                if media_embed := get_media_embed(media_object):
                     return {
                         "scrolling": media_embed.scrolling,
                         "width": media_embed.width,
@@ -549,10 +530,7 @@ class LinkJsonTemplate(ThingJsonTemplate):
         elif attr == 'subreddit_id':
             return thing.subreddit._fullname
         elif attr == 'selftext':
-            if not thing.expunged:
-                return thing.selftext
-            else:
-                return ''
+            return thing.selftext if not thing.expunged else ''
         elif attr == 'selftext_html':
             if not thing.expunged:
                 return safemarkdown(thing.selftext)
@@ -716,17 +694,11 @@ class MessageJsonTemplate(ThingJsonTemplate):
         if attr == "was_comment":
             return thing.was_comment
         elif attr == "context":
-            return ("" if not thing.was_comment
-                    else thing.permalink + "?context=3")
+            return "" if not thing.was_comment else f"{thing.permalink}?context=3"
         elif attr == "dest":
-            if thing.to_id:
-                return thing.to.name
-            else:
-                return "#" + thing.subreddit.name
+            return thing.to.name if thing.to_id else f"#{thing.subreddit.name}"
         elif attr == "subreddit":
-            if thing.sr_id:
-                return thing.subreddit.name
-            return None
+            return thing.subreddit.name if thing.sr_id else None
         elif attr == "body_html":
             return safemarkdown(thing.body)
         elif attr == "author" and getattr(thing, "hide_author", False):
@@ -771,9 +743,7 @@ class PanestackJsonTemplate(JsonTemplate):
     def render(self, thing = None, *a, **kw):
         res = [t.render() for t in thing.stack if t] if thing else []
         res = [x for x in res if x]
-        if not res:
-            return {}
-        return ObjectTemplate(res if len(res) > 1 else res[0] )
+        return {} if not res else ObjectTemplate(res if len(res) > 1 else res[0] )
 
 class NullJsonTemplate(JsonTemplate):
     def render(self, thing = None, *a, **kw):
@@ -900,11 +870,10 @@ class InvitedModTableItemJsonTemplate(RelTableItemJsonTemplate):
     )
 
     def thing_attr(self, thing, attr):
-        if attr == 'permissions':
-            permissions = thing.permissions.items()
-            return [perm for perm, has in permissions if has]
-        else:
+        if attr != 'permissions':
             return RelTableItemJsonTemplate.thing_attr(self, thing, attr)
+        permissions = thing.permissions.items()
+        return [perm for perm, has in permissions if has]
 
 
 class OrganicListingJsonTemplate(ListingJsonTemplate):
@@ -939,8 +908,7 @@ class WikiPageListingJsonTemplate(ThingJsonTemplate):
         return "wikipagelisting"
     
     def data(self, thing):
-        pages = [p.name for p in thing.linear_pages]
-        return pages
+        return [p.name for p in thing.linear_pages]
 
 class WikiViewJsonTemplate(ThingJsonTemplate):
     def kind(self, thing):
@@ -971,10 +939,7 @@ class WikiRevisionJsonTemplate(ThingJsonTemplate):
     def render(self, thing, *a, **kw):
         timestamp = time.mktime(thing.date.timetuple()) if thing.date else None
         author = thing.get_author()
-        if author and not author._deleted:
-            author = Wrapped(author).render()
-        else:
-            author = None
+        author = Wrapped(author).render() if author and not author._deleted else None
         return ObjectTemplate(dict(author=author,
                                    id=str(thing._id),
                                    timestamp=timestamp,
@@ -1074,12 +1039,10 @@ class StylesheetTemplate(ThingJsonTemplate):
 
     def images(self):
         sr_images = ImagesByWikiPage.get_images(c.site, "config/stylesheet")
-        images = []
-        for name, url in sr_images.iteritems():
-            images.append({'name': name,
-                           'link': 'url(%%%%%s%%%%)' % name,
-                           'url': url})
-        return images
+        return [
+            {'name': name, 'link': 'url(%%%%%s%%%%)' % name, 'url': url}
+            for name, url in sr_images.iteritems()
+        ]
 
     def thing_attr(self, thing, attr):
         if attr == '_images':
@@ -1147,10 +1110,12 @@ class SubredditSettingsTemplate(ThingJsonTemplate):
 
 class UploadedImageJsonTemplate(JsonTemplate):
     def render(self, thing, *a, **kw):
-        return ObjectTemplate({
-            "errors": list(k for (k, v) in thing.errors if v),
-            "img_src": thing.img_src,
-        })
+        return ObjectTemplate(
+            {
+                "errors": [k for (k, v) in thing.errors if v],
+                "img_src": thing.img_src,
+            }
+        )
 
 
 class ModActionTemplate(ThingJsonTemplate):

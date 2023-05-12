@@ -95,7 +95,7 @@ class BaseController(WSGIController):
             and true_client_ip
             and ip_hash
             and hashlib.md5(true_client_ip + g.secrets["true_ip"]).hexdigest() \
-            == ip_hash.lower()):
+                == ip_hash.lower()):
             request.ip = true_client_ip
             request.via_cdn = True
         elif g.trust_local_proxies and forwarded_for and is_local_address(remote_addr):
@@ -112,25 +112,18 @@ class BaseController(WSGIController):
         request.fullpath = environ.get('FULLPATH', request.path)
         request.fullurl = request.host_url + request.fullpath
         request.port = environ.get('request_port')
-        
-        if_modified_since = environ.get('HTTP_IF_MODIFIED_SINCE')
-        if if_modified_since:
+
+        if if_modified_since := environ.get('HTTP_IF_MODIFIED_SINCE'):
             request.if_modified_since = read_http_date(if_modified_since)
         else:
             request.if_modified_since = None
 
-        #set the function to be called
-        action = request.environ['pylons.routes_dict'].get('action')
-        if action:
+        if action := request.environ['pylons.routes_dict'].get('action'):
             meth = request.method.upper()
             if meth == 'HEAD':
                 meth = 'GET'
 
-            if meth != 'OPTIONS':
-                handler_name = meth + '_' + action
-            else:
-                handler_name = meth
-
+            handler_name = f'{meth}_{action}' if meth != 'OPTIONS' else meth
             request.environ['pylons.routes_dict']['action_name'] = action
             request.environ['pylons.routes_dict']['action'] = handler_name
 
@@ -142,7 +135,7 @@ class BaseController(WSGIController):
     def _get_action_handler(self, name=None, method=None):
         name = name or request.environ["pylons.routes_dict"]["action_name"]
         method = method or request.method
-        action = method + "_" + name
+        action = f"{method}_{name}"
         return getattr(self, action, None)
 
     @classmethod
@@ -228,6 +221,5 @@ embedopen.add_handler(EmbedHandler())
 
 def proxyurl(url):
     r = urllib2.Request(url, None, {})
-    content = embedopen.open(r).read()
-    return content
+    return embedopen.open(r).read()
 

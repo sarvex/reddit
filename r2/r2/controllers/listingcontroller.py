@@ -113,9 +113,7 @@ class ListingController(RedditController):
 
     def can_send_referrer(self):
         """Return whether links within this listing may have full referrers"""
-        if not self.private_referrer:
-            return c.site.allows_referrers
-        return False
+        return c.site.allows_referrers if not self.private_referrer else False
 
     def build_listing(self, num, after, reverse, count, **kwargs):
         """uses the query() method to define the contents of the
@@ -172,28 +170,26 @@ class ListingController(RedditController):
         elif isinstance(self.query_obj, (CachedQuery, MergedCachedQuery)):
             builder_cls = IDBuilder
 
-        b = builder_cls(self.query_obj,
-                        num = self.num,
-                        skip = self.skip,
-                        after = self.after,
-                        count = self.count,
-                        reverse = self.reverse,
-                        keep_fn = self.keep_fn(),
-                        wrap = self.builder_wrapper)
-
-        return b
+        return builder_cls(
+            self.query_obj,
+            num=self.num,
+            skip=self.skip,
+            after=self.after,
+            count=self.count,
+            reverse=self.reverse,
+            keep_fn=self.keep_fn(),
+            wrap=self.builder_wrapper,
+        )
 
     def keep_fn(self):
         def keep(item):
             wouldkeep = item.keep_item(item)
-            if isinstance(c.site, AllSR):
-                if not item.subreddit.allow_top:
-                    return False
+            if isinstance(c.site, AllSR) and not item.subreddit.allow_top:
+                return False
             if getattr(item, "promoted", None) is not None:
                 return False
-            if item._deleted and not c.user_is_admin:
-                return False
-            return wouldkeep
+            return False if item._deleted and not c.user_is_admin else wouldkeep
+
         return keep
 
     def listing(self):
@@ -215,7 +211,7 @@ class ListingController(RedditController):
 
     def title(self):
         """Page <title>"""
-        return _(self.title_text) + " : " + c.site.name
+        return f"{_(self.title_text)} : {c.site.name}"
 
     def rightbox(self):
         """Contents of the right box when rendering"""
@@ -244,7 +240,7 @@ class SubredditListingController(ListingController):
     private_referrer = False
 
     def _build_og_title(self, max_length=256):
-        sr_fragment = "/r/" + c.site.name
+        sr_fragment = f"/r/{c.site.name}"
         title = c.site.title.strip()
         if not title:
             return trunc_string(sr_fragment, max_length)
@@ -258,10 +254,10 @@ class SubredditListingController(ListingController):
         # This doesn't handle `max_length`s shorter than `sr_fragment`.
         # Unknown what the behavior should be, but realistically it shouldn't
         # happen, since this is scoped pretty small.
-        max_title_length = max_length - len(u" • %s" % sr_fragment)
+        max_title_length = max_length - len(f" • {sr_fragment}")
         title = trunc_string(title, max_title_length)
 
-        return u"%s • %s" % (_force_unicode(title), sr_fragment)
+        return f"{_force_unicode(title)} • {sr_fragment}"
 
     def _build_og_description(self):
         description = c.site.public_description.strip()
@@ -273,31 +269,30 @@ class SubredditListingController(ListingController):
     def render_params(self):
         if isinstance(c.site, DefaultSR):
             return {'show_locationbar': True}
-        else:
-            if not c.user_is_loggedin:
-                # This data is only for scrapers, which shouldn't be logged in.
-                twitter_card = {
-                    "site": "reddit",
-                    "card": "summary",
-                    "title": self._build_og_title(max_length=70),
-                    # Twitter will fall back to any defined OpenGraph
-                    # attributes, so we don't need to define
-                    # 'twitter:image' or 'twitter:description'.
-                }
-                hook = hooks.get_hook('subreddit_listing.twitter_card')
-                hook.call(tags=twitter_card, sr_name=c.site.name)
+        if not c.user_is_loggedin:
+            # This data is only for scrapers, which shouldn't be logged in.
+            twitter_card = {
+                "site": "reddit",
+                "card": "summary",
+                "title": self._build_og_title(max_length=70),
+                # Twitter will fall back to any defined OpenGraph
+                # attributes, so we don't need to define
+                # 'twitter:image' or 'twitter:description'.
+            }
+            hook = hooks.get_hook('subreddit_listing.twitter_card')
+            hook.call(tags=twitter_card, sr_name=c.site.name)
 
-                return {
-                    "og_data": {
-                        "site_name": "reddit",
-                        "title": self._build_og_title(),
-                        "image": static('icon.png'),
-                        "description": self._build_og_description(),
-                    },
-                    "twitter_card": twitter_card,
-                }
+            return {
+                "og_data": {
+                    "site_name": "reddit",
+                    "title": self._build_og_title(),
+                    "image": static('icon.png'),
+                    "description": self._build_og_description(),
+                },
+                "twitter_card": twitter_card,
+            }
 
-            return {}
+        return {}
 
 
 class ListingWithPromos(SubredditListingController):
@@ -319,8 +314,7 @@ class ListingWithPromos(SubredditListingController):
             return res
 
     def make_single_ad(self):
-        srnames = promote.srnames_with_live_promos(c.user, c.site)
-        if srnames:
+        if srnames := promote.srnames_with_live_promos(c.user, c.site):
             return SpotlightListing(show_promo=True, srnames=srnames,
                                     navigable=False).listing()
 
@@ -459,8 +453,7 @@ class HotController(ListingWithPromos):
         content = super(HotController, self).content()
         if (c.render_style == "html" and isinstance(c.site, DefaultSR) and
                 not self.listing_obj.prev):
-            trending_info = self.trending_info()
-            if trending_info:
+            if trending_info := self.trending_info():
                 return PaneStack(filter(None, [
                     self.spotlight,
                     TrendingSubredditsBar(**trending_info),
@@ -487,10 +480,8 @@ class NewController(ListingWithPromos):
 
     def keep_fn(self):
         def keep(item):
-            if item.promoted is not None:
-                return False
-            else:
-                return item.keep_item(item)
+            return False if item.promoted is not None else item.keep_item(item)
+
         return keep
 
     def query(self):
@@ -532,12 +523,12 @@ class BrowseController(ListingWithPromos):
         """For merged time-listings, don't show items that are too old
            (this can happen when mr_top hasn't run in a while)"""
         if self.time != 'all' and c.default_sr:
-            oldest = timeago('1 %s' % (str(self.time),))
+            oldest = timeago(f'1 {str(self.time)}')
             def keep(item):
-                if isinstance(c.site, AllSR):
-                    if not item.subreddit.allow_top:
-                        return False
+                if isinstance(c.site, AllSR) and not item.subreddit.allow_top:
+                    return False
                 return item._date > oldest and item.keep_item(item)
+
             return keep
         else:
             return ListingController.keep_fn(self)
@@ -683,11 +674,13 @@ class UserController(ListingController):
             if len(srnames) > 1:
                 sr_buttons = [QueryButton(_('all'), None, query_param='sr',
                                         css_class='primary')]
-                for srname in srnames:
-                    sr_buttons.append(QueryButton(srname, srname, query_param='sr'))
-                base_path = '/user/%s/saved' % self.vuser.name
+                sr_buttons.extend(
+                    QueryButton(srname, srname, query_param='sr')
+                    for srname in srnames
+                )
+                base_path = f'/user/{self.vuser.name}/saved'
                 if self.savedcategory:
-                    base_path += '/%s' % urllib.quote(self.savedcategory)
+                    base_path += f'/{urllib.quote(self.savedcategory)}'
                 sr_menu = NavMenu(sr_buttons, base_path=base_path,
                                   title=_('filter by subreddit'),
                                   type='lightdrop')
@@ -697,18 +690,18 @@ class UserController(ListingController):
             categories = sorted(set(categories))
             if len(categories) >= 1:
                 cat_buttons = [NavButton(_('all'), '/', css_class='primary')]
-                for cat in categories:
-                    cat_buttons.append(NavButton(cat,
-                                                 urllib.quote(cat),
-                                                 use_params=True))
-                base_path = '/user/%s/saved/' % self.vuser.name
+                cat_buttons.extend(
+                    NavButton(cat, urllib.quote(cat), use_params=True)
+                    for cat in categories
+                )
+                base_path = f'/user/{self.vuser.name}/saved/'
                 cat_menu = NavMenu(cat_buttons, base_path=base_path,
                                    title=_('filter by category'),
                                    type='lightdrop')
                 res.append(cat_menu)
         elif (self.where == 'gilded' and
                 (c.user == self.vuser or c.user_is_admin)):
-            path = '/user/%s/gilded/' % self.vuser.name
+            path = f'/user/{self.vuser.name}/gilded/'
             buttons = [NavButton(_("gildings received"), dest='/'),
                        NavButton(_("gildings given"), dest='/given')]
             res.append(NavMenu(buttons, base_path=path, type='flatlist'))
@@ -728,9 +721,9 @@ class UserController(ListingController):
         if self.where == 'gilded' and self.show == 'given':
             return _("gildings given by %(user)s") % {'user': self.vuser.name}
 
-        title = titles.get(self.where, _('profile for %(user)s')) \
-            % dict(user = self.vuser.name, site = c.site.name)
-        return title
+        return titles.get(self.where, _('profile for %(user)s')) % dict(
+            user=self.vuser.name, site=c.site.name
+        )
 
     def keep_fn(self):
         def keep(item):
@@ -750,8 +743,9 @@ class UserController(ListingController):
                 if self.where == 'saved' and not item.saved:
                     return False
 
-            if (self.time != 'all' and
-                item._date <= utils.timeago('1 %s' % str(self.time))):
+            if self.time != 'all' and item._date <= utils.timeago(
+                f'1 {str(self.time)}'
+            ):
                 return False
 
             if self.where == 'gilded' and item.gildings <= 0:
@@ -761,10 +755,8 @@ class UserController(ListingController):
                 return False
 
             is_promoted = getattr(item, "promoted", None) is not None
-            if self.where != 'saved' and is_promoted:
-                return False
+            return self.where == 'saved' or not is_promoted
 
-            return True
         return keep
 
     def query(self):
@@ -811,10 +803,7 @@ class UserController(ListingController):
         elif c.user_is_sponsor and self.where == 'promoted':
             q = queries.get_promoted_links(self.vuser._id)
 
-        if q is None:
-            return self.abort404()
-
-        return q
+        return self.abort404() if q is None else q
 
     @require_oauth2_scope("history")
     @validate(vuser = VExistingUname('username', allow_deleted=True),
@@ -848,12 +837,20 @@ class UserController(ListingController):
 
 
         # hide spammers profile pages
-        if vuser._spam and not vuser.banned_profile_visible:
-            if (not c.user_is_loggedin or
-                    not (c.user._id == vuser._id or
-                         c.user_is_admin or
-                         c.user_is_sponsor and where == "promoted")):
-                return self.abort404()
+        if (
+            vuser._spam
+            and not vuser.banned_profile_visible
+            and (
+                not c.user_is_loggedin
+                or not (
+                    c.user._id == vuser._id
+                    or c.user_is_admin
+                    or c.user_is_sponsor
+                    and where == "promoted"
+                )
+            )
+        ):
+            return self.abort404()
 
         if where in ('liked', 'disliked') and not votes_visible(vuser):
             return self.abort403()
@@ -908,19 +905,17 @@ class UserController(ListingController):
             abort(404)
 
         dest = "/".join(("/user", c.user.name, "saved"))
-        extension = request.environ.get('extension')
-        if extension:
+        if extension := request.environ.get('extension'):
             dest = ".".join((dest, extension))
-        query_string = request.environ.get('QUERY_STRING')
-        if query_string:
-            dest += "?" + query_string
+        if query_string := request.environ.get('QUERY_STRING'):
+            dest += f"?{query_string}"
         return self.redirect(dest)
 
     @validate(VUser())
     def GET_rel_user_redirect(self, rest=""):
-        url = "/user/%s/%s" % (c.user.name, rest)
+        url = f"/user/{c.user.name}/{rest}"
         if request.query_string:
-            url += "?" + request.query_string
+            url += f"?{request.query_string}"
         return self.redirect(url, code=302)
 
 
@@ -1004,55 +999,56 @@ class MessageController(ListingController):
         return w
 
     def builder(self):
-        if (self.where == 'messages' or
-            (self.where in ("moderator", "multi") and self.subwhere != "unread")):
-            root = c.user
-            message_cls = UserMessageBuilder
+        if self.where != 'messages' and (
+            self.where not in ("moderator", "multi") or self.subwhere == "unread"
+        ):
+            return ListingController.builder(self)
+        root = c.user
+        message_cls = UserMessageBuilder
 
-            if self.where == "multi":
-                root = c.site
-                message_cls = MultiredditMessageBuilder
-            elif not c.default_sr:
-                root = c.site
-                message_cls = SrMessageBuilder
-            elif self.where == 'moderator' and self.subwhere != 'unread':
+        if self.where == "multi":
+            root = c.site
+            message_cls = MultiredditMessageBuilder
+        elif not c.default_sr:
+            root = c.site
+            message_cls = SrMessageBuilder
+        elif self.where == 'moderator' and self.subwhere != 'unread':
+            message_cls = ModeratorMessageBuilder
+        elif self.message and self.message.sr_id:
+            sr = self.message.subreddit_slow
+            if sr.is_moderator_with_perms(c.user, 'mail'):
+                # this is a moderator message and the user is a moderator.
+                # use the ModeratorMessageBuilder because not all messages
+                # will be in the user's mailbox
                 message_cls = ModeratorMessageBuilder
-            elif self.message and self.message.sr_id:
-                sr = self.message.subreddit_slow
-                if sr.is_moderator_with_perms(c.user, 'mail'):
-                    # this is a moderator message and the user is a moderator.
-                    # use the ModeratorMessageBuilder because not all messages
-                    # will be in the user's mailbox
-                    message_cls = ModeratorMessageBuilder
 
-            parent = None
-            skip = False
-            if self.message:
-                if self.message.first_message:
-                    parent = Message._byID(self.message.first_message,
-                                           data=True)
-                else:
-                    parent = self.message
-            elif c.user.pref_threaded_messages:
-                skip = (c.render_style == "html")
+        parent = None
+        skip = False
+        if self.message:
+            if self.message.first_message:
+                parent = Message._byID(self.message.first_message,
+                                       data=True)
+            else:
+                parent = self.message
+        elif c.user.pref_threaded_messages:
+            skip = (c.render_style == "html")
 
-            if (message_cls is UserMessageBuilder and parent and parent.sr_id
-                and not parent.from_sr):
-                # Make sure we use the subreddit message builder for modmail,
-                # because the per-user cache will be wrong if more than two
-                # parties are involved in the thread.
-                root = Subreddit._byID(parent.sr_id)
-                message_cls = SrMessageBuilder
+        if (message_cls is UserMessageBuilder and parent and parent.sr_id
+            and not parent.from_sr):
+            # Make sure we use the subreddit message builder for modmail,
+            # because the per-user cache will be wrong if more than two
+            # parties are involved in the thread.
+            root = Subreddit._byID(parent.sr_id)
+            message_cls = SrMessageBuilder
 
-            return message_cls(root,
-                               wrap = self.builder_wrapper,
-                               parent = parent,
-                               skip = skip,
-                               num = self.num,
-                               after = self.after,
-                               keep_fn = self.keep_fn(),
-                               reverse = self.reverse)
-        return ListingController.builder(self)
+        return message_cls(root,
+                           wrap = self.builder_wrapper,
+                           parent = parent,
+                           skip = skip,
+                           num = self.num,
+                           after = self.after,
+                           keep_fn = self.keep_fn(),
+                           reverse = self.reverse)
 
     def _verify_inbox_count(self, kept_msgs):
         """If a user has experienced drift in their inbox counts, correct it.
@@ -1126,10 +1122,13 @@ class MessageController(ListingController):
             return
         else:
             return self.abort404()
-        if self.where != 'sent':
-            #reset the inbox
-            if c.have_messages and c.user.pref_mark_messages_read and self.mark != 'false':
-                c.have_messages = False
+        if (
+            self.where != 'sent'
+            and c.have_messages
+            and c.user.pref_mark_messages_read
+            and self.mark != 'false'
+        ):
+            c.have_messages = False
 
         return q
 
@@ -1308,8 +1307,7 @@ class MyredditsController(ListingController):
     def builder_wrapper(self, thing):
         w = ListingController.builder_wrapper(thing)
         if self.where == 'moderator':
-            is_moderator = thing.is_moderator(c.user)
-            if is_moderator:
+            if is_moderator := thing.is_moderator(c.user):
                 w.mod_permissions = is_moderator.get_permissions()
         return w
 
@@ -1417,16 +1415,12 @@ class UserListListingController(ListingController):
 
     @property
     def render_params(self):
-        params = {}
         is_wiki_action = self.where in ["wikibanned", "wikicontributors"]
-        params["show_wiki_actions"] = is_wiki_action
-        return params
+        return {"show_wiki_actions": is_wiki_action}
 
     @property
     def render_cls(self):
-        if self.where in ["friends", "blocked"]:
-            return PrefsPage
-        return Reddit
+        return PrefsPage if self.where in ["friends", "blocked"] else Reddit
 
     def moderator_wrap(self, rel, invited=False):
         rel._permission_class = ModeratorPermissionSet
@@ -1466,9 +1460,7 @@ class UserListListingController(ListingController):
         return section_title
 
     def rel(self):
-        if self.where in ['friends', 'blocked']:
-            return Friend
-        return SRMember
+        return Friend if self.where in ['friends', 'blocked'] else SRMember
 
     def name(self):
         return self._names.get(self.where)
@@ -1485,10 +1477,7 @@ class UserListListingController(ListingController):
 
     def query(self):
         rel = self.rel()
-        if self.where in ["friends", "blocked"]:
-            thing1_id = c.user._id
-        else:
-            thing1_id = c.site._id
+        thing1_id = c.user._id if self.where in ["friends", "blocked"] else c.site._id
         reversed_types = ["friends", "moderators", "blocked"]
         sort = desc if self.where not in reversed_types else asc
         q = rel._query(rel.c._thing1_id == thing1_id,
@@ -1582,10 +1571,7 @@ class UserListListingController(ListingController):
     @require_oauth2_scope("read")
     @validate(user=VAccountByName('user'))
     @base_listing
-    @listing_api_doc(section=api_section.subreddits,
-                     uses_site=True,
-                     uri='/about/{where}',
-                     uri_variants=['/about/' + where for where in [
+    @listing_api_doc(section=api_section.subreddits, uses_site=True, uri='/about/{where}', uri_variants=[f'/about/{where}' for where in [
                         'banned', 'wikibanned', 'contributors',
                         'wikicontributors', 'moderators']])
     def GET_listing(self, where, user=None, **kw):
@@ -1607,7 +1593,12 @@ class UserListListingController(ListingController):
         self.jump_to_val = request.GET.get('user')
         self.show_not_found = bool(self.jump_to_val)
 
-        if where == 'contributors':
+        if where == 'banned':
+            if not has_mod_access:
+                abort(403)
+            self.listing_cls = BannedListing
+
+        elif where == 'contributors':
             # On public reddits, only moderators may see the whitelist.
             if c.site.type == 'public' and not has_mod_access:
                 abort(403)
@@ -1620,10 +1611,12 @@ class UserListListingController(ListingController):
             self.listing_cls = ContributorListing
             self.editable = has_mod_access
 
-        elif where == 'banned':
-            if not has_mod_access:
-                abort(403)
-            self.listing_cls = BannedListing
+        elif where == 'moderators':
+            self.editable = ((c.user_is_loggedin and
+                              c.site.is_unlimited_moderator(c.user)) or
+                             c.user_is_admin)
+            self.listing_cls = ModListing
+            self.paginated = False
 
         elif where == 'wikibanned':
             if not c.site.is_moderator_with_perms(c.user, 'wiki'):
@@ -1634,13 +1627,6 @@ class UserListListingController(ListingController):
             if not c.site.is_moderator_with_perms(c.user, 'wiki'):
                 abort(403)
             self.listing_cls = WikiMayContributeListing
-
-        elif where == 'moderators':
-            self.editable = ((c.user_is_loggedin and
-                              c.site.is_unlimited_moderator(c.user)) or
-                             c.user_is_admin)
-            self.listing_cls = ModListing
-            self.paginated = False
 
         if not self.listing_cls:
             abort(404)

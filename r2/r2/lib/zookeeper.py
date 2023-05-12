@@ -110,10 +110,7 @@ class LiveList(object):
         unquoted = (urllib.unquote(c) for c in children)
         mapped = map(self.map_fn, unquoted)
 
-        if reduce:
-            return list(self.reduce_fn(mapped))
-        else:
-            return list(mapped)
+        return list(self.reduce_fn(mapped)) if reduce else list(mapped)
 
     def add(self, item):
         path = self._nodepath(item)

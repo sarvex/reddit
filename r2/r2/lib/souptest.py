@@ -143,7 +143,7 @@ def souptest_fragment(fragment):
     # We also need to wrap everything in a div, as lxml throws out
     # comments outside the root tag. This also ensures that attempting an
     # entity declaration or similar shenanigans will cause a syntax error.
-    documentized_fragment = "%s<div>%s</div>" % (souptest_doctype, fragment)
+    documentized_fragment = f"{souptest_doctype}<div>{fragment}</div>"
     s = StringIO(documentized_fragment)
 
     try:
@@ -159,9 +159,8 @@ def souptest_fragment(fragment):
         # they're almost all control codes: (`&#x00;`, `&#x1c;`, etc.)
         if value.msg.startswith('xmlParseCharRef: invalid xmlChar '):
             raise SoupUnsupportedEntityError, (value,), trace
-        undef_ent = re.match(UNDEFINED_ENTITY_RE, value.msg)
-        if undef_ent:
-            raise SoupUnsupportedEntityError, (value, undef_ent.group(1)), trace
+        if undef_ent := re.match(UNDEFINED_ENTITY_RE, value.msg):
+            raise (SoupUnsupportedEntityError, (value, undef_ent[1]), trace)
 
         raise SoupSyntaxError, (value,), trace
 

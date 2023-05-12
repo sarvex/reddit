@@ -124,16 +124,16 @@ def _make_cssmin(python_only=False):
     string1 = \
         r'(?:\047[^\047\\\r\n\f]*(?:\\[^\r\n\f][^\047\\\r\n\f]*)*\047)'
     string2 = r'(?:"[^"\\\r\n\f]*(?:\\[^\r\n\f][^"\\\r\n\f]*)*")'
-    strings = r'(?:%s|%s)' % (string1, string2)
+    strings = f'(?:{string1}|{string2})'
 
     nl_string1 = \
         r'(?:\047[^\047\\\r\n\f]*(?:\\(?:[^\r]|\r\n?)[^\047\\\r\n\f]*)*\047)'
     nl_string2 = r'(?:"[^"\\\r\n\f]*(?:\\(?:[^\r]|\r\n?)[^"\\\r\n\f]*)*")'
-    nl_strings = r'(?:%s|%s)' % (nl_string1, nl_string2)
+    nl_strings = f'(?:{nl_string1}|{nl_string2})'
 
     uri_nl_string1 = r'(?:\047[^\047\\]*(?:\\(?:[^\r]|\r\n?)[^\047\\]*)*\047)'
     uri_nl_string2 = r'(?:"[^"\\]*(?:\\(?:[^\r]|\r\n?)[^"\\]*)*")'
-    uri_nl_strings = r'(?:%s|%s)' % (uri_nl_string1, uri_nl_string2)
+    uri_nl_strings = f'(?:{uri_nl_string1}|{uri_nl_string2})'
 
     nl_escaped = r'(?:\\%(nl)s)' % locals()
 
@@ -205,10 +205,7 @@ def _make_cssmin(python_only=False):
                 if match.lastindex:
                     group1, group2 = match.group(1, 2)
                     if group2:
-                        if group1.endswith(r'\*/'):
-                            in_macie5[0] = 1
-                        else:
-                            in_macie5[0] = 0
+                        in_macie5[0] = 1 if group1.endswith(r'\*/') else 0
                         return group1
                     elif group1:
                         if group1.endswith(r'\*/'):
@@ -220,6 +217,7 @@ def _make_cssmin(python_only=False):
                             in_macie5[0] = 0
                             return '/**/'
                 return ''
+
         else:
             space_sub = space_sub_simple
             def space_subber(match):
@@ -239,18 +237,18 @@ def _make_cssmin(python_only=False):
             """ space with token after """
             if group(5) is None or (
                     group(6) == ':' and not in_rule[0] and not at_media[0]):
-                return ' ' + space_sub(space_subber, group(4))
+                return f' {space_sub(space_subber, group(4))}'
             return space_sub(space_subber, group(4))
 
         def fn_semicolon(group):
             """ ; handler """
-            return ';' + space_sub(space_subber, group(7))
+            return f';{space_sub(space_subber, group(7))}'
 
         def fn_semicolon2(group):
             """ ; handler """
             if in_rule[0]:
                 return space_sub(space_subber, group(7))
-            return ';' + space_sub(space_subber, group(7))
+            return f';{space_sub(space_subber, group(7))}'
 
         def fn_open(group):
             """ { handler """
@@ -277,33 +275,29 @@ def _make_cssmin(python_only=False):
             if not in_rule[0] and not at_media[0]:
                 in_macie5[0] = 0
                 return group(14) + space_sub(space_subber, group(15))
-            return '>' + space_sub(space_subber, group(15))
+            return f'>{space_sub(space_subber, group(15))}'
 
         table = (
             None,
             None,
             None,
             None,
-            fn_space_post,                      # space with token after
-            fn_space_post,                      # space with token after
-            fn_space_post,                      # space with token after
-            fn_semicolon,                       # semicolon
-            fn_semicolon2,                      # semicolon
-            fn_open,                            # {
-            fn_close,                           # }
-            lambda g: g(11),                    # string
-            lambda g: 'url(%s)' % uri_space_sub(uri_space_subber, g(12)),
-                                                # url(...)
-            fn_media,                           # @media
+            fn_space_post,
+            fn_space_post,
+            fn_space_post,
+            fn_semicolon,
+            fn_semicolon2,
+            fn_open,
+            fn_close,
+            lambda g: g(11),
+            lambda g: f'url({uri_space_sub(uri_space_subber, g(12))})',
+            fn_media,
             None,
-            fn_ie7hack,                         # ie7hack
+            fn_ie7hack,
             None,
-            lambda g: g(16) + ' ' + space_sub(space_subber, g(17)),
-                                                # :first-line|letter followed
-                                                # by [{,] (apparently space
-                                                # needed for IE6)
-            lambda g: nl_unesc_sub('', g(18)),  # nl_string
-            lambda g: post_esc_sub(' ', g(19)), # escape
+            lambda g: f'{g(16)} {space_sub(space_subber, g(17))}',
+            lambda g: nl_unesc_sub('', g(18)),
+            lambda g: post_esc_sub(' ', g(19)),
         )
 
         def func(match):

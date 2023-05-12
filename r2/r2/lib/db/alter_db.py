@@ -27,8 +27,7 @@ def thing_tables():
     for type in tdb_sql.types_id.values():
         yield type.thing_table
 
-    for table in tdb_sql.extra_thing_tables.values():
-        yield table
+    yield from tdb_sql.extra_thing_tables.values()
 
 def rel_tables():
     for type in tdb_sql.rel_types_id.values():

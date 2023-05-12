@@ -171,7 +171,7 @@ def _add_item(routing_key, body, message_id = None,
     if headers:
         msg.properties["application_headers"] = headers
 
-    event_name = 'amqp.%s' % routing_key
+    event_name = f'amqp.{routing_key}'
     try:
         chan.basic_publish(msg,
                            exchange=exchange,

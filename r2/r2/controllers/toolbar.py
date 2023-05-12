@@ -53,7 +53,7 @@ def demangle_url(path):
         if not allowed_protocol.match(path):
             return None
     else:
-        path = 'http://%s' % path
+        path = f'http://{path}'
 
     if need_insert_slash.match(path):
         path = string.replace(path, '/', '//', 1)
@@ -66,11 +66,10 @@ def match_current_reddit_subdomain(url):
     # due to X-Frame-Options: SAMEORIGIN headers, we can't frame mismatched
     # reddit subdomains
     parsed = UrlParser(url)
-    if parsed.is_reddit_url():
-        parsed.hostname = request.host
-        return parsed.unparse()
-    else:
+    if not parsed.is_reddit_url():
         return url
+    parsed.hostname = request.host
+    return parsed.unparse()
 
 def force_html():
     """Because we can take URIs like /s/http://.../foo.png, and we can
@@ -99,9 +98,7 @@ class ToolbarController(RedditController):
     def GET_goto(self, link1, link2):
         """Support old /goto?id= urls. deprecated"""
         link = link2 if link2 else link1
-        if link:
-            return self.redirect(add_sr("/tb/" + link._id36))
-        return self.abort404()
+        return self.redirect(add_sr(f"/tb/{link._id36}")) if link else self.abort404()
 
     @validate(link = VLink('id'))
     def GET_tb(self, link):
@@ -120,16 +117,12 @@ class ToolbarController(RedditController):
             return self.redirect(link.url)
         elif not (c.user_is_loggedin and c.user.uses_toolbar):
             return self.redirect(link.make_permalink_slow(force_domain=True))
-        
+
         # if the domain is shame-banned, bail out.
         if is_shamed_domain(link.url)[0]:
             self.abort404()
 
-        if link.has_thumbnail:
-            thumbnail = thumbnail_url(link)
-        else:
-            thumbnail = None
-
+        thumbnail = thumbnail_url(link) if link.has_thumbnail else None
         res = Frame(
             title=link.title,
             url=match_current_reddit_subdomain(link.url),
@@ -181,11 +174,10 @@ class ToolbarController(RedditController):
         if link:
             # we were able to find it, let's send them to the
             # toolbar (if enabled) or comments (if not)
-            return self.redirect(add_sr("/tb/" + link._id36))
-        else:
-            # It hasn't been submitted yet. Give them a chance to
-            qs = utils.query_string({"url": path})
-            return self.redirect(add_sr("/submit" + qs))
+            return self.redirect(add_sr(f"/tb/{link._id36}"))
+        # It hasn't been submitted yet. Give them a chance to
+        qs = utils.query_string({"url": path})
+        return self.redirect(add_sr(f"/submit{qs}"))
 
     @validate(link = VLink('id'))
     def GET_comments(self, link):
@@ -249,7 +241,5 @@ class ToolbarController(RedditController):
 
     @validate(link = VLink('linkoid'))
     def GET_linkoid(self, link):
-        if not link:
-            return self.abort404()
-        return self.redirect(add_sr("/tb/" + link._id36))
+        return self.redirect(add_sr(f"/tb/{link._id36}")) if link else self.abort404()
 

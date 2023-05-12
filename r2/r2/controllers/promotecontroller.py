@@ -138,10 +138,9 @@ def has_oversold_error(form, campaign, start, end, bid, cpm, target, location):
     ndays = (to_date(end) - to_date(start)).days
     total_request = calc_impressions(bid, cpm)
     daily_request = int(total_request / ndays)
-    oversold = inventory.get_oversold(
-        target, start, end, daily_request, ignore=campaign, location=location)
-
-    if oversold:
+    if oversold := inventory.get_oversold(
+        target, start, end, daily_request, ignore=campaign, location=location
+    ):
         min_daily = min(oversold.values())
         available = min_daily * ndays
         msg_params = {
@@ -288,12 +287,11 @@ class SponsorController(PromoteController):
             except NotFound:
                 c.errors.add(errors.SUBREDDIT_NOEXIST, field='sr_name')
         elif collection_name:
-            collection = Collection.by_name(collection_name)
-            if not collection:
-                c.errors.add(errors.COLLECTION_NOEXIST, field='collection_name')
-            else:
+            if collection := Collection.by_name(collection_name):
                 target = Target(collection)
 
+            else:
+                c.errors.add(errors.COLLECTION_NOEXIST, field='collection_name')
         content = PromoteInventory(start, end, target)
 
         if c.render_style == 'csv':
@@ -351,9 +349,11 @@ class PromoteListingController(ListingController):
             NamedButton('live_promos',
                         use_params=False),
         ]
-        menus = [NavMenu(filters, base_path=self.base_path, title='show',
-                         type='lightdrop')]
-        return menus
+        return [
+            NavMenu(
+                filters, base_path=self.base_path, title='show', type='lightdrop'
+            )
+        ]
 
     def builder_wrapper(self, thing):
         builder_wrapper = default_thing_wrapper()
@@ -372,10 +372,8 @@ class PromoteListingController(ListingController):
                            for camp in campaigns):
                     return False
 
-            if item.promoted and not item._deleted:
-                return True
-            else:
-                return False
+            return bool(item.promoted and not item._deleted)
+
         return keep
 
     def query(self):
@@ -429,10 +427,14 @@ class SponsorListingController(PromoteListingController):
             buttons = [NavButton('all', '', use_params=True)]
             try:
                 srnames.remove(Frontpage.name)
-                frontbutton = NavButton('FRONTPAGE', Frontpage.name,
-                                        use_params=True,
-                                        aliases=['/promoted/live_promos/%s' %
-                                                 urllib.quote(Frontpage.name)])
+                frontbutton = NavButton(
+                    'FRONTPAGE',
+                    Frontpage.name,
+                    use_params=True,
+                    aliases=[
+                        f'/promoted/live_promos/{urllib.quote(Frontpage.name)}'
+                    ],
+                )
                 buttons.append(frontbutton)
             except KeyError:
                 pass
@@ -440,7 +442,7 @@ class SponsorListingController(PromoteListingController):
             srnames = sorted(srnames, key=lambda name: name.lower())
             buttons.extend(
                 NavButton(name, name, use_params=True) for name in srnames)
-            base_path = self.base_path + '/live_promos'
+            base_path = f'{self.base_path}/live_promos'
             menus.append(NavMenu(buttons, base_path=base_path,
                                  title='subreddit', type='lightdrop'))
         return menus
@@ -451,8 +453,8 @@ class SponsorListingController(PromoteListingController):
         promotuples = promote.get_live_promotions(sr_names)
         return [pt.link for pt in promotuples]
 
-    def live_by_subreddit(cls, sr):
-        return cls._live_by_subreddit([sr.name])
+    def live_by_subreddit(self, sr):
+        return self._live_by_subreddit([sr.name])
 
     @classmethod
     @memoize('house_link_names', time=60)
@@ -612,7 +614,7 @@ class PromoteApiController(ApiController):
 
         promote.review_fraud(thing, is_fraud)
 
-        button = jquery(".id-%s .fraud-button" % thing._fullname)
+        button = jquery(f".id-{thing._fullname} .fraud-button")
         button.text(_("fraud" if is_fraud else "not fraud"))
         form.fadeOut()
 
@@ -727,10 +729,7 @@ class PromoteApiController(ApiController):
                     media_url, media_autoplay, media_override,
                     gifts_embed_url, media_url_type, domain_override,
                     is_managed, l=None, thumbnail_file=None):
-        should_ratelimit = False
-        if not c.user_is_sponsor:
-            should_ratelimit = True
-
+        should_ratelimit = not c.user_is_sponsor
         if not should_ratelimit:
             c.errors.remove((errors.RATELIMIT, 'ratelimit'))
 
@@ -770,9 +769,10 @@ class PromoteApiController(ApiController):
                 # want the URL
                 url = url[0].url
 
-        if kind == 'link':
-            if form.has_errors('url', errors.NO_URL, errors.BAD_URL):
-                return
+        if kind == 'link' and form.has_errors(
+            'url', errors.NO_URL, errors.BAD_URL
+        ):
+            return
 
         # users can change the disable_comments on promoted links
         if ((not l or not promote.is_promoted(l)) and
@@ -837,10 +837,11 @@ class PromoteApiController(ApiController):
         l.disable_comments = disable_comments
         l.sendreplies = sendreplies
 
-        if c.user_is_sponsor:
-            if (form.has_errors("media_url", errors.BAD_URL) or
-                    form.has_errors("gifts_embed_url", errors.BAD_URL)):
-                return
+        if c.user_is_sponsor and (
+            form.has_errors("media_url", errors.BAD_URL)
+            or form.has_errors("gifts_embed_url", errors.BAD_URL)
+        ):
+            return
 
         scraper_embed = media_url_type == "scrape"
         media_url = media_url or None
@@ -848,11 +849,12 @@ class PromoteApiController(ApiController):
 
         if c.user_is_sponsor and scraper_embed and media_url != l.media_url:
             if media_url:
-                media = _scrape_media(
-                    media_url, autoplay=media_autoplay,
-                    save_thumbnail=False, use_cache=True)
-
-                if media:
+                if media := _scrape_media(
+                    media_url,
+                    autoplay=media_autoplay,
+                    save_thumbnail=False,
+                    use_cache=True,
+                ):
                     l.set_media_object(media.media_object)
                     l.set_secure_media_object(media.secure_media_object)
                     l.media_url = media_url
@@ -899,16 +901,13 @@ class PromoteApiController(ApiController):
                 }
                 l.set_media_object(media_object)
                 l.set_secure_media_object(media_object)
-                l.media_url = None
                 l.gifts_embed_url = gifts_embed_url
-                l.media_autoplay = False
             else:
                 l.set_media_object(None)
                 l.set_secure_media_object(None)
-                l.media_url = None
                 l.gifts_embed_url = None
-                l.media_autoplay = False
-
+            l.media_autoplay = False
+            l.media_url = None
         if c.user_is_sponsor:
             l.media_override = media_override
             l.domain_override = domain_override or None
@@ -1085,10 +1084,10 @@ class PromoteApiController(ApiController):
 
         # Check inventory
         campaign = campaign if campaign_id36 else None
-        if not priority.inventory_override:
-            oversold = has_oversold_error(form, campaign, start, end, bid, cpm,
-                                          target, location)
-            if oversold:
+        if oversold := has_oversold_error(
+            form, campaign, start, end, bid, cpm, target, location
+        ):
+            if not priority.inventory_override:
                 return
 
         dates = (start, end)
@@ -1170,8 +1169,7 @@ class PromoteApiController(ApiController):
 
         new_payment = not pay_id
 
-        address_modified = new_payment or edit
-        if address_modified:
+        if address_modified := new_payment or edit:
             address_fields = ["firstName", "lastName", "company", "address",
                               "city", "state", "zip", "country", "phoneNumber"]
             card_fields = ["cardNumber", "expirationDate", "cardCode"]
@@ -1221,7 +1219,7 @@ class PromoteApiController(ApiController):
             # only let sponsors edit thumbnails of live promos
             return abort(403, 'forbidden')
 
-        force_thumbnail(link, file, file_type=".%s" % img_type)
+        force_thumbnail(link, file, file_type=f".{img_type}")
         link._commit()
         return UploadedImage(_('saved'), thumbnail_url(link), "", errors=errors,
                              form_id="image-upload").render()

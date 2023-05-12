@@ -55,12 +55,7 @@ class World(object):
 
     def current_subreddit(self):
         site = self.stacked_proxy_safe_get(c, 'site')
-        if not site:
-            # In non-request code (eg queued jobs), there isn't necessarily a
-            # site name (or other request-type data).  In those cases, we don't
-            # want to trigger any subreddit-specific code.
-            return ''
-        return site.name
+        return '' if not site else site.name
 
     def current_subdomain(self):
         return self.stacked_proxy_safe_get(c, 'subdomain')
@@ -76,15 +71,10 @@ class World(object):
         return user.name in self.stacked_proxy_safe_get(g, 'admins', [])
 
     def is_employee(self, user):
-        if not user:
-            return False
-        return user.employee
+        return False if not user else user.employee
 
     def has_gold(self, user):
-        if not user:
-            return False
-
-        return user.gold
+        return False if not user else user.gold
 
     def url_features(self):
         return set(request.GET.getall('feature'))

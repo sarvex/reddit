@@ -54,10 +54,7 @@ class PermissionSet(dict):
     def is_valid(self):
         if not self.info:
             return False
-        for k in self:
-            if k != self.ALL and k not in self.info:
-                return False
-        return True
+        return not any(k != self.ALL and k not in self.info for k in self)
 
     def get(self, key, default=None):
         if self.info and self.is_superuser():

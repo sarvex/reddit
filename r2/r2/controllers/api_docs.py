@@ -141,18 +141,14 @@ class ApidocsController(RedditController):
             valid_methods = ('GET', 'POST', 'PUT', 'DELETE', 'PATCH')
             api_doc = getattr(func, '_api_doc', None)
             if api_doc and 'section' in api_doc and method in valid_methods:
-                docs = {}
-                docs['doc'] = inspect.getdoc(func)
-
+                docs = {'doc': inspect.getdoc(func)}
                 if 'extends' in api_doc:
-                    docs.update(api_doc['extends'])
+                    docs |= api_doc['extends']
                     # parameters are handled separately.
                     docs['parameters'] = {}
                 docs.update(api_doc)
 
-                # append a message to the docstring if supplied
-                notes = docs.get("notes")
-                if notes:
+                if notes := docs.get("notes"):
                     notes = "\n".join(notes)
                     if docs["doc"]:
                         docs["doc"] += "\n\n" + notes
@@ -218,10 +214,11 @@ class ApidocsController(RedditController):
             (CaptchaController, ''),
             (FrontController, ''),
         ]
-        for name, value in vars(listingcontroller).iteritems():
-            if name.endswith('Controller'):
-                api_controllers.append((value, ''))
-
+        api_controllers.extend(
+            (value, '')
+            for name, value in vars(listingcontroller).iteritems()
+            if name.endswith('Controller')
+        )
         # bring in documented plugin controllers
         api_controllers.extend(g.plugins.get_documented_controllers())
 

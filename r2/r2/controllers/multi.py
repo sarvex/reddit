@@ -333,13 +333,12 @@ class MultiApiController(RedditController):
 
         """
         if not to_path_info:
-            if display_name:
-                # if path not provided, copy multi to same owner
-                path = LabeledMulti.slugify(from_multi.owner, display_name)
-                to_path_info = VMultiPath("").run(path)
-            else:
+            if not display_name:
                 raise RedditError('BAD_MULTI_PATH', code=400)
 
+            # if path not provided, copy multi to same owner
+            path = LabeledMulti.slugify(from_multi.owner, display_name)
+            to_path_info = VMultiPath("").run(path)
         to_multi = self._copy_multi(from_multi, to_path_info)
 
         from_path = from_multi.path
@@ -347,8 +346,7 @@ class MultiApiController(RedditController):
         if to_multi.description_md:
             to_multi.description_md += '\n\n'
         to_multi.description_md += _('copied from %(source)s') % {
-            # force markdown linking since /user/foo is not autolinked
-            'source': '[%s](%s)' % (from_path, from_path)
+            'source': f'[{from_path}]({from_path})'
         }
         to_multi.visibility = 'private'
         if display_name:
@@ -375,12 +373,11 @@ class MultiApiController(RedditController):
     def POST_multi_rename(self, from_multi, to_path_info, display_name):
         """Rename a multi."""
         if not to_path_info:
-            if display_name:
-                path = LabeledMulti.slugify(from_multi.owner, display_name)
-                to_path_info = VMultiPath("").run(path)
-            else:
+            if not display_name:
                 raise RedditError('BAD_MULTI_PATH', code=400)
 
+            path = LabeledMulti.slugify(from_multi.owner, display_name)
+            to_path_info = VMultiPath("").run(path)
         to_multi = self._copy_multi(from_multi, to_path_info, rename=True)
 
         if display_name:
@@ -421,7 +418,7 @@ class MultiApiController(RedditController):
     def PUT_multi_subreddit(self, multi, sr_name, data):
         """Add a subreddit to a multi."""
 
-        new = not any(sr.name.lower() == sr_name.lower() for sr in multi.srs)
+        new = all(sr.name.lower() != sr_name.lower() for sr in multi.srs)
 
         data['name'] = sr_name
         sr_props = self._add_multi_srs(multi, [data])

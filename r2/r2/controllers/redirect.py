@@ -39,19 +39,16 @@ class RedirectController(BaseController):
         user = chkuser(username)
         if not user:
             abort(400)
-        url = "/user/" + user
+        url = f"/user/{user}"
         if rest:
-            url += "/" + rest
+            url += f"/{rest}"
         if request.query_string:
-            url += "?" + request.query_string
+            url += f"?{request.query_string}"
         return self.redirect(str(url), code=301)
 
     def GET_timereddit_redirect(self, timereddit, rest=None):
-        sr_name = "t:" + timereddit
+        sr_name = f"t:{timereddit}"
         if not Subreddit.is_valid_name(sr_name, allow_time_srs=True):
             abort(400)
-        if rest:
-            rest = str(rest)
-        else:
-            rest = ''
-        return self.redirect("/r/%s/%s" % (sr_name, rest), code=301)
+        rest = str(rest) if rest else ''
+        return self.redirect(f"/r/{sr_name}/{rest}", code=301)

@@ -242,7 +242,7 @@ class WikiController(RedditController):
         return WikiListing(pages, linear_pages).render()
 
     def GET_wiki_redirect(self, page='index'):
-        return self.redirect(str("%s/%s" % (c.wiki_base_url, page)), code=301)
+        return self.redirect(str(f"{c.wiki_base_url}/{page}"), code=301)
 
     @require_oauth2_scope("wikiread")
     @api_doc(api_section.wiki, uri='/wiki/discussions/{page}', uses_site=True)
@@ -250,7 +250,7 @@ class WikiController(RedditController):
     @validate(page=VWikiPage('page', restricted=True))
     def GET_wiki_discussions(self, page, num, after, reverse, count):
         """Retrieve a list of discussions about this wiki `page`"""
-        page_url = add_sr("%s/%s" % (c.wiki_base_url, page.name))
+        page_url = add_sr(f"{c.wiki_base_url}/{page.name}")
         builder = url_links_builder(page_url, num=num, after=after,
                                     reverse=reverse, count=count)
         listing = LinkListing(builder).listing()
@@ -289,13 +289,11 @@ class WikiController(RedditController):
             page.listed = listed
             page._commit()
             verb = 'Relisted' if listed else 'Delisted'
-            description = '%s page %s' % (verb, page.name)
+            description = f'{verb} page {page.name}'
             ModAction.create(c.site, c.user, 'wikipagelisted',
                              description=description)
         if oldpermlevel != permlevel:
-            description = 'Page: %s, Changed from %s to %s' % (
-                page.name, oldpermlevel, permlevel
-            )
+            description = f'Page: {page.name}, Changed from {oldpermlevel} to {permlevel}'
             ModAction.create(c.site, c.user, 'wikipermlevel',
                              description=description)
         return self.GET_wiki_settings(page=page.name)
@@ -326,10 +324,10 @@ class WikiController(RedditController):
 
         mode = c.site.wikimode
         if not mode or mode == 'disabled':
-            if not c.is_wiki_mod:
-                self.handle_error(403, 'WIKI_DISABLED')
-            else:
+            if c.is_wiki_mod:
                 c.wikidisabled = True
+            else:
+                self.handle_error(403, 'WIKI_DISABLED')
 
     # Redirects from the old wiki
     def GET_faq(self):
@@ -351,8 +349,7 @@ class WikiApiController(WikiController):
         page, previous = pageandprevious
 
         if not page:
-            error = c.errors.get(('WIKI_CREATE_ERROR', 'page'))
-            if error:
+            if error := c.errors.get(('WIKI_CREATE_ERROR', 'page')):
                 self.handle_error(403, **(error.msg_params or {}))
             if not c.user._spam:
                 page = WikiPage.create(c.site, page_name)
@@ -391,7 +388,7 @@ class WikiApiController(WikiController):
                     c.site._commit()
 
                 if page.special or c.is_wiki_mod:
-                    description = modactions.get(page.name, 'Page %s edited' % page.name)
+                    description = modactions.get(page.name, f'Page {page.name} edited')
                     ModAction.create(c.site, c.user, 'wikirevise', details=description)
         except ConflictException as e:
             self.handle_error(409, 'EDIT_CONFLICT', newcontent=e.new, newrevision=page.revision, diffcontent=e.htmldiff)
@@ -403,9 +400,7 @@ class WikiApiController(WikiController):
               page=VWikiPage('page'),
               act=VOneOf('act', ('del', 'add')),
               user=VExistingUname('username'))
-    @api_doc(api_section.wiki, uri='/api/wiki/alloweditor/{act}',
-             uses_site=True,
-             uri_variants=['/api/wiki/alloweditor/%s' % act for act in ('del', 'add')])
+    @api_doc(api_section.wiki, uri='/api/wiki/alloweditor/{act}', uses_site=True, uri_variants=[f'/api/wiki/alloweditor/{act}' for act in ('del', 'add')])
     def POST_wiki_allow_editor(self, act, page, user):
         """Allow/deny `username` to edit this wiki `page`"""
         if not user:
@@ -457,7 +452,7 @@ class WikiApiController(WikiController):
         if not revision:
             self.handle_error(400, 'INVALID_REVISION')
         content = revision.content
-        reason = 'reverted back %s' % timesince(revision.date)
+        reason = f'reverted back {timesince(revision.date)}'
         if page.name == 'config/stylesheet':
             css_errors, parsed = c.site.parse_css(content)
             if css_errors:

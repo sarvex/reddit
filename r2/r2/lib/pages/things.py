@@ -91,11 +91,14 @@ class LinkButtons(PrintableButtons):
         if thing.can_ban or is_author or (thing.promoted and c.user_is_sponsor):
             if not thing.nsfw:
                 show_marknsfw = True
-            elif thing.nsfw and not thing.nsfw_str:
+            elif not thing.nsfw_str:
                 show_unmarknsfw = True
 
-            if (not thing.is_self and
-                    not (thing.has_thumbnail or thing.media_object)):
+            if (
+                not thing.is_self
+                and not thing.has_thumbnail
+                and not thing.media_object
+            ):
                 show_rescrape = True
         show_givegold = thing.can_gild and (c.permalink_page or c.profilepage)
 
@@ -224,11 +227,7 @@ class MessageButtons(PrintableButtons):
         can_reply = (c.user_is_loggedin and
                      getattr(thing, "repliable", True) and
                      valid_recipient)
-        can_block = True
-
-        if not thing.was_comment and thing.display_author:
-            can_block = False
-
+        can_block = bool(thing.was_comment or not thing.display_author)
         # Allow comment-reply messages to have links to the full thread.
         if was_comment:
             self.full_comment_path = thing.link_permalink
@@ -281,8 +280,7 @@ def hot_links_by_url_listing(url, sr=None, num=None, **kw):
         links_for_url = []
 
     links_for_url.sort(key=lambda link: link._hot, reverse=True)
-    listing = wrap_links(links_for_url, num=num, **kw)
-    return listing
+    return wrap_links(links_for_url, num=num, **kw)
 
 
 def wrap_things(*things):

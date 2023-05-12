@@ -125,9 +125,11 @@ def reject_vote(thing):
     elif voteword == '-1':
         voteword = 'downvote'
 
-    log_text ("rejected vote", "Rejected %s from %s (%s) on %s %s via %s" %
-              (voteword, c.user.name, request.ip, thing.__class__.__name__,
-               thing._id36, request.referer), "info")
+    log_text(
+        "rejected vote",
+        f"Rejected {voteword} from {c.user.name} ({request.ip}) on {thing.__class__.__name__} {thing._id36} via {request.referer}",
+        "info",
+    )
 
 
 class ApiminimalController(MinimalController):
@@ -165,7 +167,7 @@ class ApiController(RedditController):
     """
     @validatedForm()
     def ajax_login_redirect(self, form, jquery, dest):
-        form.redirect("/login" + query_string(dict(dest=dest)))
+        form.redirect(f"/login{query_string(dict(dest=dest))}")
 
     @pagecache_policy(PAGECACHE_POLICY.NEVER)
     @require_oauth2_scope("read")
@@ -214,10 +216,7 @@ class ApiController(RedditController):
 
         c.update_last_visit = False
 
-        if url:
-            listing = hot_links_by_url_listing(url, sr=c.site, num=count)
-        else:
-            listing = None
+        listing = hot_links_by_url_listing(url, sr=c.site, num=count) if url else None
         return BoringPage(_("API"), content=listing).render()
 
     @json_validate()
@@ -227,10 +226,7 @@ class ApiController(RedditController):
         Response includes a modhash, karma, and new mail status.
 
         """
-        if c.user_is_loggedin:
-            return Wrapped(c.user).render()
-        else:
-            return {}
+        return Wrapped(c.user).render() if c.user_is_loggedin else {}
 
     @json_validate(user=VUname(("user",)))
     @api_doc(api_section.users)
@@ -444,11 +440,12 @@ class ApiController(RedditController):
                 if c.user._spam:
                     msg = strings.generic_quota_msg
                 else:
-                    log_text ("over-quota",
-                              "%s just went over their per-%s quota" %
-                              (c.user.name, filled_quota), "info")
+                    log_text(
+                        "over-quota",
+                        f"{c.user.name} just went over their per-{filled_quota} quota",
+                        "info",
+                    )
 
-                    verify_link = "/verify?reason=submit"
                     reddiquette_link = "/wiki/reddiquette"
 
                     if c.user.email_verified:
@@ -456,6 +453,7 @@ class ApiController(RedditController):
                         msg %= {"reddiquette": reddiquette_link}
                     else:
                         msg = strings.unverified_quota_msg
+                        verify_link = "/verify?reason=submit"
                         msg %= {
                             "verify": verify_link,
                             "reddiquette": reddiquette_link,
@@ -477,8 +475,7 @@ class ApiController(RedditController):
 
             if not resubmit:
                 listing = hot_links_by_url_listing(url, sr=sr, num=1)
-                links = listing.things
-                if links:
+                if links := listing.things:
                     c.errors.add(errors.ALREADY_SUB, field='url')
                     form.has_errors('url', errors.ALREADY_SUB)
                     u = links[0].already_submitted_link(url)
@@ -489,12 +486,15 @@ class ApiController(RedditController):
                     form.redirect(u)
                     return
 
-        if not c.user_is_admin and kind == 'self':
-            if len(selftext) > sr.selftext_max_length:
-                c.errors.add(errors.TOO_LONG, field='text',
-                             msg_params={'max_length': sr.selftext_max_length})
-                form.set_error(errors.TOO_LONG, 'text')
-                return
+        if (
+            not c.user_is_admin
+            and kind == 'self'
+            and len(selftext) > sr.selftext_max_length
+        ):
+            c.errors.add(errors.TOO_LONG, field='text',
+                         msg_params={'max_length': sr.selftext_max_length})
+            form.set_error(errors.TOO_LONG, 'text')
+            return
 
         if not request.POST.get('sendreplies'):
             sendreplies = kind == 'self'
@@ -508,10 +508,9 @@ class ApiController(RedditController):
                          sendreplies=sendreplies)
 
         if kind == 'link':
-            ban = is_banned_domain(url)
-            if ban:
+            if ban := is_banned_domain(url):
                 g.stats.simple_event('spam.domainban.link_url')
-                admintools.spam(l, banner = "domain (%s)" % ban.banmsg)
+                admintools.spam(l, banner=f"domain ({ban.banmsg})")
                 hooks.get_hook('banned_domain.submit').call(item=l, url=url,
                                                             ban=ban)
 
@@ -537,10 +536,10 @@ class ApiController(RedditController):
             path = add_sr(l.make_permalink_slow())
         elif then == 'tb':
             form.attr('target', '_top')
-            path = add_sr('/tb/%s' % l._id36)
+            path = add_sr(f'/tb/{l._id36}')
 
         if extension:
-            path += ".%s" % extension
+            path += f".{extension}"
 
         form.redirect(path)
         form._send_data(url=path)
@@ -561,8 +560,7 @@ class ApiController(RedditController):
         VRatelimit.ratelimit(rate_ip = True, rate_user = True,
                              prefix = 'fetchtitle_', seconds=1)
         if url:
-            title = get_title(url)
-            if title:
+            if title := get_title(url):
                 form.set_inputs(title = title)
                 form.set_text(".title-status", "")
             else:
@@ -584,7 +582,7 @@ class ApiController(RedditController):
             # The client may decide to redirect somewhere after a successful
             # login, send it our HSTS grant endpoint so it can redirect through
             # there and pick up the user's grant.
-            hsts_redir = "https://" + g.domain + "/modify_hsts_grant?dest="
+            hsts_redir = f"https://{g.domain}/modify_hsts_grant?dest="
             responder._send_data(hsts_redir=hsts_redir)
         responder._send_data(need_https=user.https_forced)
 
@@ -785,17 +783,13 @@ class ApiController(RedditController):
         self.check_api_friend_oauth_scope(type)
 
         victim = iuser or nuser
-        
+
         if type in self._sr_friend_types:
             if isinstance(c.site, FakeSubreddit):
                 abort(403, 'forbidden')
             container = c.site
-            if c.user._spam:
-                # The requesting user is marked as spam, and is trying to
-                # do a mod action. The only action they should be allowed to do
-                # and have it stick is demodding themself
-                if not (c.user == victim and type == 'moderator'):
-                    return
+            if c.user._spam and (c.user != victim or type != 'moderator'):
+                return
         else:
             container = VByName('container').run(container)
             if not container:
@@ -822,7 +816,7 @@ class ApiController(RedditController):
         # be the current user.
         if type in ("friend", "enemy") and container != c.user:
             abort(403, 'forbidden')
-        fn = getattr(container, 'remove_' + type)
+        fn = getattr(container, f'remove_{type}')
         new = fn(victim)
 
         # Log this action
@@ -874,9 +868,14 @@ class ApiController(RedditController):
             rel.set_permissions(permissions)
             rel._commit()
             update = rel.encoded_permissions
-            ModAction.create(c.site, c.user, action='setpermissions',
-                             target=target, details='permission_' + type,
-                             description=update)
+            ModAction.create(
+                c.site,
+                c.user,
+                action='setpermissions',
+                target=target,
+                details=f'permission_{type}',
+                description=update,
+            )
 
         if update:
             row = form.closest('tr')
@@ -935,7 +934,7 @@ class ApiController(RedditController):
             # attempts to add moderators now create moderator invites.
             type = "moderator_invite"
 
-        fn = getattr(container, 'add_' + type)
+        fn = getattr(container, f'add_{type}')
 
         # Make sure the user making the request has the correct permissions
         # to be able to make this status change
@@ -953,17 +952,17 @@ class ApiController(RedditController):
                 abort(403, 'forbidden')
 
         if type == 'moderator_invite':
-            invites = sum(1 for i in container.each_moderator_invite())
+            invites = sum(1 for _ in container.each_moderator_invite())
             if invites >= g.sr_invite_limit:
                 c.errors.add(errors.SUBREDDIT_RATELIMIT, field="name")
                 form.set_error(errors.SUBREDDIT_RATELIMIT, "name")
                 return
 
         if type in self._sr_friend_types and not c.user_is_admin:
-            quota_key = "sr%squota-%s" % (str(type), container._id36)
+            quota_key = f"sr{str(type)}quota-{container._id36}"
             g.cache.add(quota_key, 0, time=g.sr_quota_time)
             subreddit_quota = g.cache.incr(quota_key)
-            quota_limit = getattr(g, "sr_%s_quota" % type)
+            quota_limit = getattr(g, f"sr_{type}_quota")
             if subreddit_quota > quota_limit and container.use_quotas:
                 form.set_text(".status", errors.SUBREDDIT_RATELIMIT)
                 c.errors.add(errors.SUBREDDIT_RATELIMIT)
@@ -1074,7 +1073,7 @@ class ApiController(RedditController):
             form.set_text(".status:first", user_row.executed_message)
             rev_types = ["moderator", "moderator_invite", "friend"]
             index = 0 if user_row.type not in rev_types else -1
-            table = jquery("." + type + "-table").show().find("table")
+            table = jquery(f".{type}-table").show().find("table")
             table.insert_table_rows(user_row, index=index)
             table.find(".notfound").hide()
 
@@ -1272,9 +1271,11 @@ class ApiController(RedditController):
         if form.has_errors("curpass", errors.WRONG_PASSWORD):
             return
 
-        if (password and
-            not (form.has_errors("newpass", errors.BAD_PASSWORD) or
-                 form.has_errors("verpass", errors.BAD_PASSWORD_MATCH))):
+        if (
+            password
+            and not form.has_errors("newpass", errors.BAD_PASSWORD)
+            and not form.has_errors("verpass", errors.BAD_PASSWORD_MATCH)
+        ):
             change_password(c.user, password)
 
             if c.user.email:
@@ -1483,7 +1484,7 @@ class ApiController(RedditController):
         if state:
             sr.sticky_fullname = thing._fullname
             ModAction.create(sr, c.user, 'sticky', target=thing)
-        elif not state:
+        else:
             sr.sticky_fullname = None
             ModAction.create(sr, c.user, 'unsticky', target=thing)
 
@@ -1510,11 +1511,7 @@ class ApiController(RedditController):
 
         """
         if not thing:
-            # preserve old behavior: we used to send the thing's fullname as the
-            # "id" parameter, but we can't use that because that name is used to
-            # send the form's id
-            thing_id = request.POST.get('id')
-            if thing_id:
+            if thing_id := request.POST.get('id'):
                 thing = VByName('id').run(thing_id)
 
         if not thing or thing._deleted:
@@ -1538,16 +1535,10 @@ class ApiController(RedditController):
                     not (sr and c.user._id in sr.moderator_ids())):
                 abort(403)
             admintools.spam(thing, False, True, c.user.name)
-        # auto-hide links that are reported
         elif isinstance(thing, Link):
             # don't hide items from admins/moderators when reporting
             if not (c.user_is_admin or sr.is_moderator(c.user)):
                 thing._hide(c.user)
-        # TODO: be nice to be able to remove comments that are reported
-        # from a user's inbox so they don't have to look at them.
-        elif isinstance(thing, Comment):
-            pass
-
         hooks.get_hook("thing.report").call(thing=thing)
 
         if not (c.user._spam or
@@ -1557,9 +1548,9 @@ class ApiController(RedditController):
             admintools.report(thing)
 
         if isinstance(thing, (Link, Message)):
-            button = jquery(".id-%s .report-button" % thing._fullname)
+            button = jquery(f".id-{thing._fullname} .report-button")
         elif isinstance(thing, Comment):
-            button = jquery(".id-%s .entry:first .report-button" % thing._fullname)
+            button = jquery(f".id-{thing._fullname} .entry:first .report-button")
         else:
             return
 
@@ -1845,7 +1836,6 @@ class ApiController(RedditController):
             shareform.find(".message-errors").children().hide()
         elif shareform.has_errors("message", errors.TOO_LONG):
             shareform.find(".share-form-errors").children().hide()
-        # reply_to and share_to also share errors...
         elif shareform.has_errors("share_to", errors.BAD_EMAILS,
                                   errors.NO_EMAILS,
                                   errors.TOO_MANY_EMAILS):
@@ -1853,7 +1843,6 @@ class ApiController(RedditController):
         elif shareform.has_errors("replyto", errors.BAD_EMAILS,
                                   errors.TOO_MANY_EMAILS):
             shareform.find(".share-to-errors").children().hide()
-        # lastly, check the captcha.
         elif shareform.has_errors("captcha", errors.BAD_CAPTCHA):
             pass
         elif shareform.has_errors("ratelimit", errors.RATELIMIT):
@@ -1892,19 +1881,19 @@ class ApiController(RedditController):
 
                 url = add_sr(link.make_permalink_slow(), force_hostname=True)
                 message = message + url
-            
+
             # E-mail everyone
             emailer.share(link, emails, from_name = share_from or "",
                           body = message or "", reply_to = reply_to or "")
 
             # Send the PMs
-            subject = "%s has shared a link with you!" % c.user.name
+            subject = f"{c.user.name} has shared a link with you!"
             # Prepend this subject to the message - we're repeating ourselves
             # because it looks very abrupt without it.
             message = "%s\n\n%s" % (subject,message)
-            
+
             for target in users:
-                
+
                 m, inbox_rel = Message._new(c.user, target, subject,
                                             message, request.ip)
                 # Queue up this PM
@@ -1953,9 +1942,12 @@ class ApiController(RedditController):
         if not isinstance(thing, (Link, Comment)):
             return
 
-        if isinstance(thing, Link) and promote.is_promo(thing):
-            if not promote.is_promoted(thing):
-                return      
+        if (
+            isinstance(thing, Link)
+            and promote.is_promo(thing)
+            and not promote.is_promoted(thing)
+        ):
+            return      
 
         if vote_info == 'rejected':
             reject_vote(thing)
@@ -2020,13 +2012,9 @@ class ApiController(RedditController):
         jquery.apply_stylesheet(parsed)
 
         if op == 'preview':
-            # try to find a link to use, otherwise give up and
-            # return
-            links = SubredditStylesheet.find_preview_links(c.site)
-            if links:
-
+            if links := SubredditStylesheet.find_preview_links(c.site):
                 jquery('#preview-table').show()
-    
+
                 # do a regular link
                 jquery('#preview_link_normal').html(
                     SubredditStylesheet.rendered_link(
@@ -2043,10 +2031,8 @@ class ApiController(RedditController):
                 jquery('#preview_link_stickied').html(
                     SubredditStylesheet.rendered_link(
                         links, media='off', compress=False, stickied=True))
-    
-            # and do a comment
-            comments = SubredditStylesheet.find_preview_comments(c.site)
-            if comments:
+
+            if comments := SubredditStylesheet.find_preview_comments(c.site):
                 jquery('#preview_comment').html(
                     SubredditStylesheet.rendered_comment(comments))
 
@@ -2227,12 +2213,12 @@ class ApiController(RedditController):
         # for backwards compatibility, map header to upload_type
         if upload_type is None:
             upload_type = 'header' if header else 'img'
-        
+
         if upload_type == 'img' and not name:
             # error if the name wasn't specified and the image was not for a sponsored link or header
             # this may also fail if a sponsored image was added and the user is not an admin
             errors['BAD_CSS_NAME'] = _("bad image name")
-        
+
         if upload_type == 'img' and not c.user_is_admin:
             image_count = wiki.ImagesByWikiPage.get_image_count(
                 c.site, "config/stylesheet")
@@ -2261,38 +2247,37 @@ class ApiController(RedditController):
 
         if any(errors.values()):
             return UploadedImage("", "", "", errors=errors, form_id=form_id).render()
-        else:
-            try:
-                new_url = media.upload_media(file, file_type="." + img_type)
-            except Exception as e:
-                g.log.warning("error uploading subreddit image: %s", e)
-                errors['IMAGE_ERROR'] = _("Invalid image or general image error")
-                return UploadedImage("", "", "", errors=errors, form_id=form_id).render()
+        try:
+            new_url = media.upload_media(file, file_type=f".{img_type}")
+        except Exception as e:
+            g.log.warning("error uploading subreddit image: %s", e)
+            errors['IMAGE_ERROR'] = _("Invalid image or general image error")
+            return UploadedImage("", "", "", errors=errors, form_id=form_id).render()
 
-            if upload_type == 'img':
-                wiki.ImagesByWikiPage.add_image(c.site, "config/stylesheet",
-                                                name, new_url)
-                kw = dict(details='upload_image', description=name)
-            elif upload_type == 'header':
-                c.site.header = new_url
-                c.site.header_size = size
-                c.site._commit()
-                kw = dict(details='upload_image_header')
-            elif upload_type == 'icon':
-                c.site.icon_img = new_url
-                c.site.icon_size = size
-                c.site._commit()
-                kw = dict(details='upload_image_icon')
-            elif upload_type == 'banner':
-                c.site.banner_img = new_url
-                c.site.banner_size = size
-                c.site._commit()
-                kw = dict(details='upload_image_banner')
+        if upload_type == 'img':
+            wiki.ImagesByWikiPage.add_image(c.site, "config/stylesheet",
+                                            name, new_url)
+            kw = dict(details='upload_image', description=name)
+        elif upload_type == 'header':
+            c.site.header = new_url
+            c.site.header_size = size
+            c.site._commit()
+            kw = dict(details='upload_image_header')
+        elif upload_type == 'icon':
+            c.site.icon_img = new_url
+            c.site.icon_size = size
+            c.site._commit()
+            kw = dict(details='upload_image_icon')
+        elif upload_type == 'banner':
+            c.site.banner_img = new_url
+            c.site.banner_size = size
+            c.site._commit()
+            kw = dict(details='upload_image_banner')
 
-            ModAction.create(c.site, c.user, action='editsettings', **kw)
+        ModAction.create(c.site, c.user, action='editsettings', **kw)
 
-            return UploadedImage(_('saved'), new_url, name, 
-                                 errors=errors, form_id=form_id).render()
+        return UploadedImage(_('saved'), new_url, name, 
+                             errors=errors, form_id=form_id).render()
 
     @require_oauth2_scope("modconfig")
     @validatedForm(VUser(),

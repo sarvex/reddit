@@ -96,15 +96,12 @@ class MemcacheLock(object):
                 if (datetime.now() - start).seconds > self.timeout:
                     if self.verbose:
                         info = self.cache.get(self.key)
-                        if info:
-                            info = "%s %s\n%s" % info
-                        else:
-                            info = "(nonexistent)"
+                        info = "%s %s\n%s" % info if info else "(nonexistent)"
                         msg = ("\nSome jerk is hogging %s:\n%s" %
                                          (self.key, info))
                         msg += "^^^ that was the stack trace of the lock hog, not me."
                     else:
-                        msg = "Timed out waiting for %s" % self.key
+                        msg = f"Timed out waiting for {self.key}"
                     raise TimeoutExpired(msg)
                 else:
                     # this should prevent unnecessary spam on highly contended locks.

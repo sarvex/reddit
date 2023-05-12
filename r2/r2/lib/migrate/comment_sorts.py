@@ -43,11 +43,11 @@ def combine_links():
 
         ups, downs, timestamp = t.ups, t.downs, t.timestamp
 
-        yield link_id36+'_controversy', id36, sorts.controversy(ups, downs)
-        yield link_id36+'_hot',         id36, sorts._hot(ups, downs, timestamp)
-        yield link_id36+'_confidence',  id36, sorts.confidence(ups, downs)
-        yield link_id36+'_score',       id36, sorts.score(ups, downs)
-        yield link_id36+'_date',        id36, timestamp
+        yield (f'{link_id36}_controversy', id36, sorts.controversy(ups, downs))
+        yield (f'{link_id36}_hot', id36, sorts._hot(ups, downs, timestamp))
+        yield (f'{link_id36}_confidence', id36, sorts.confidence(ups, downs))
+        yield (f'{link_id36}_score', id36, sorts.score(ups, downs))
+        yield (f'{link_id36}_date', id36, timestamp)
 
     return mr_tools.mr_map(_process)
 

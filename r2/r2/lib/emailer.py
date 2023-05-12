@@ -80,10 +80,10 @@ def verify_email(user, dest=None):
 
     token = EmailVerificationToken._new(user)
     base = g.https_endpoint or g.origin
-    emaillink = base + '/verification/' + token._id
+    emaillink = f'{base}/verification/{token._id}'
     if dest:
-        emaillink += '?dest=%s' % dest
-    g.log.debug("Generated email verification link: " + emaillink)
+        emaillink += f'?dest={dest}'
+    g.log.debug(f"Generated email verification link: {emaillink}")
 
     _system_email(user.email,
                   VerifyEmail(user=user,
@@ -96,7 +96,7 @@ def password_email(user):
     """
     from r2.lib.pages import PasswordReset
 
-    reset_count_key = "email-reset_count_%s" % user._id
+    reset_count_key = f"email-reset_count_{user._id}"
     g.cache.add(reset_count_key, 0, time=3600 * 12)
     if g.cache.incr(reset_count_key) > 3:
         return False
@@ -108,8 +108,8 @@ def password_email(user):
 
     token = PasswordResetToken._new(user)
     base = g.https_endpoint or g.origin
-    passlink = base + '/resetpassword/' + token._id
-    g.log.info("Generated password reset link: " + passlink)
+    passlink = f'{base}/resetpassword/{token._id}'
+    g.log.info(f"Generated password reset link: {passlink}")
     _system_email(user.email,
                   PasswordReset(user=user,
                                 passlink=passlink).render(style='email'),
@@ -146,7 +146,7 @@ def message_notification_email(data):
                 datum['to'], user_email=user.email,
                 user_password_hash=user.password)
         base = g.https_endpoint or g.origin
-        unsubscribe_link = base + '/mail/unsubscribe/%s/%s' % (datum['to'], mac)
+        unsubscribe_link = f"{base}/mail/unsubscribe/{datum['to']}/{mac}"
 
         templateData = {
             'sender_username': datum.get('from', ''),
@@ -177,10 +177,10 @@ def generate_notification_email_unsubscribe_token(user_id36, user_email=None,
 
     if (not user_email) or (not user_password_hash):
         user = Account._byID36(user_id36, data=True)
-        if not user_email:
-            user_email = user.email
-        if not user_password_hash:
-            user_password_hash = user.password
+    if not user_email:
+        user_email = user.email
+    if not user_password_hash:
+        user_password_hash = user.password
 
     return hmac.new(
         g.secrets['email_notifications'],

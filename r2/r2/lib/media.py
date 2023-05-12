@@ -83,8 +83,7 @@ def _image_to_str(image):
 
 def str_to_image(s):
     s = cStringIO.StringIO(s)
-    image = Image.open(s)
-    return image
+    return Image.open(s)
 
 
 def _image_entropy(img):
@@ -208,11 +207,8 @@ def optimize_jpeg(filename):
 
 def thumbnail_url(link):
     """Given a link, returns the url for its thumbnail based on its fullname"""
-    if link.has_thumbnail:
-        if hasattr(link, "thumbnail_url"):
-            return link.thumbnail_url
-        else:
-            return ''
+    if link.has_thumbnail and hasattr(link, "thumbnail_url"):
+        return link.thumbnail_url
     else:
         return ''
 
@@ -260,7 +256,7 @@ def upload_media(image, file_type='.jpg'):
 
 
 def upload_stylesheet(content):
-    file_name = _filename_from_content(content) + ".css"
+    file_name = f"{_filename_from_content(content)}.css"
     return g.media_provider.put(file_name, content)
 
 
@@ -328,11 +324,10 @@ def _scrape_media(url, autoplay=False, maxwidth=600, force=False,
 def _set_media(link, force=False, **kwargs):
     if link.is_self:
         return
-    if not force and link.promoted:
+    if not force and (
+        link.promoted or link.has_thumbnail or link.media_object
+    ):
         return
-    elif not force and (link.has_thumbnail or link.media_object):
-        return
-
     media = _scrape_media(link.url, force=force, **kwargs)
 
     if media and not link.promoted:
@@ -363,7 +358,7 @@ def upload_icon(image_data, size):
     image.thumbnail(size, Image.ANTIALIAS)
     icon_data = _image_to_str(image)
     file_name = _filename_from_content(icon_data)
-    return g.media_provider.put(file_name + ".png", icon_data)
+    return g.media_provider.put(f"{file_name}.png", icon_data)
 
 
 def _make_custom_media_embed(media_object):
@@ -380,8 +375,7 @@ def get_media_embed(media_object):
         return
 
     embed_hook = hooks.get_hook("scraper.media_embed")
-    media_embed = embed_hook.call_until_return(media_object=media_object)
-    if media_embed:
+    if media_embed := embed_hook.call_until_return(media_object=media_object):
         return media_embed
 
     if media_object.get("type") == "custom":
@@ -436,8 +430,7 @@ def _make_thumbnail_from_url(thumbnail_url, referer):
 class Scraper(object):
     @classmethod
     def for_url(cls, url, autoplay=False, maxwidth=600):
-        scraper = hooks.get_hook("scraper.factory").call_until_return(url=url)
-        if scraper:
+        if scraper := hooks.get_hook("scraper.factory").call_until_return(url=url):
             return scraper
 
         embedly_services = _fetch_embedly_services()
@@ -522,17 +515,17 @@ class _ThumbnailOnlyScraper(Scraper):
 
             # ignore little images
             if area < 5000:
-                g.log.debug('ignore little %s' % image_url)
+                g.log.debug(f'ignore little {image_url}')
                 continue
 
             # ignore excessively long/wide images
             if max(size) / min(size) > 1.5:
-                g.log.debug('ignore dimensions %s' % image_url)
+                g.log.debug(f'ignore dimensions {image_url}')
                 continue
 
             # penalize images with "sprite" in their name
             if 'sprite' in image_url.lower():
-                g.log.debug('penalizing sprite %s' % image_url)
+                g.log.debug(f'penalizing sprite {image_url}')
                 area /= 10
 
             if area > max_area:
@@ -562,9 +555,9 @@ class _EmbedlyScraper(Scraper):
             "secure": "true" if secure else "false",
         }
 
-        param_dict.update(self.embedly_params)
+        param_dict |= self.embedly_params
         params = urllib.urlencode(param_dict)
-        content = requests.get(self.EMBEDLY_API_URL + "?" + params).content
+        content = requests.get(f"{self.EMBEDLY_API_URL}?{params}").content
         return json.loads(content)
 
     def _make_media_object(self, oembed):
@@ -631,13 +624,13 @@ def _fetch_embedly_services():
 
     service_data = _fetch_embedly_service_data()
 
-    services = []
-    for service in service_data:
-        services.append((
-            re.compile("(?:%s)" % "|".join(service["regex"])),
+    return [
+        (
+            re.compile(f'(?:{"|".join(service["regex"])})'),
             service["name"] in _SECURE_SERVICES,
-        ))
-    return services
+        )
+        for service in service_data
+    ]
 
 
 def run():

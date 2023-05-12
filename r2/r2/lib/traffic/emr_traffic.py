@@ -74,7 +74,7 @@ class TrafficBase(EmrJob):
         return [bootstrap]
 
     @classmethod
-    def _setup_steps(self):
+    def _setup_steps(cls):
         return [InstallPigStep()]
 
 
@@ -85,9 +85,13 @@ class PigProcessHour(PigStep):
     def __init__(self, log_path, output_path):
         self.log_path = log_path
         self.output_path = output_path
-        self.name = '%s (%s)' % (self.STEP_NAME, self.log_path)
-        pig_args = ['-p', 'OUTPUT=%s' % self.output_path,
-                    '-p', 'LOGFILE=%s' % self.log_path]
+        self.name = f'{self.STEP_NAME} ({self.log_path})'
+        pig_args = [
+            '-p',
+            f'OUTPUT={self.output_path}',
+            '-p',
+            f'LOGFILE={self.log_path}',
+        ]
         PigStep.__init__(self, self.name, self.PIG_FILE, pig_args=pig_args)
 
 
@@ -98,9 +102,13 @@ class PigAggregate(PigStep):
     def __init__(self, input_path, output_path):
         self.input_path = input_path
         self.output_path = output_path
-        self.name = '%s (%s)' % (self.STEP_NAME, self.input_path)
-        pig_args = ['-p', 'INPUT=%s' % self.input_path,
-                    '-p', 'OUTPUT=%s' % self.output_path]
+        self.name = f'{self.STEP_NAME} ({self.input_path})'
+        pig_args = [
+            '-p',
+            f'INPUT={self.input_path}',
+            '-p',
+            f'OUTPUT={self.output_path}',
+        ]
         PigStep.__init__(self, self.name, self.PIG_FILE, pig_args=pig_args)
 
 
@@ -111,9 +119,13 @@ class PigCoalesce(PigStep):
     def __init__(self, input_path, output_path):
         self.input_path = input_path
         self.output_path = output_path
-        self.name = '%s (%s)' % (self.STEP_NAME, self.input_path)
-        pig_args = ['-p', 'INPUT=%s' % self.input_path,
-                    '-p', 'OUTPUT=%s' % self.output_path]
+        self.name = f'{self.STEP_NAME} ({self.input_path})'
+        pig_args = [
+            '-p',
+            f'INPUT={self.input_path}',
+            '-p',
+            f'OUTPUT={self.output_path}',
+        ]
         PigStep.__init__(self, self.name, self.PIG_FILE, pig_args=pig_args)
 
 
@@ -185,9 +197,9 @@ def run_traffic_step(emr_connection, step, jobflow_name,
         attempts += 1
 
     if exit_state != COMPLETED:
-        msg = '%s failed (exit: %s)' % (step.name, exit_state)
+        msg = f'{step.name} failed (exit: {exit_state})'
         if retries:
-            msg += 'retried %s times' % retries
+            msg += f'retried {retries} times'
         raise EmrException(msg)
 
 

@@ -28,8 +28,6 @@ from r2.lib.validator import validate, VAdmin
 class ErrorlogController(RedditController):
     @validate(VAdmin())
     def GET_index(self):
-        res = AdminPage(content = AdminErrorLog(),
-                        title = 'error log',
-                        show_sidebar = False
-                        ).render()
-        return res
+        return AdminPage(
+            content=AdminErrorLog(), title='error log', show_sidebar=False
+        ).render()

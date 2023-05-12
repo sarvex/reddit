@@ -83,26 +83,24 @@ class FrontController(RedditController):
     def GET_oldinfo(self, article, type, dest, rest=None, comment=''):
         """Legacy: supporting permalink pages from '06,
            and non-search-engine-friendly links"""
-        if not (dest in ('comments','related','details')):
-                dest = 'comments'
+        if dest not in ('comments', 'related', 'details'):
+            dest = 'comments'
         if type == 'ancient':
             #this could go in config, but it should never change
             max_link_id = 10000000
             new_id = max_link_id - int(article._id)
-            return self.redirect('/info/' + to36(new_id) + '/' + rest)
+            return self.redirect(f'/info/{to36(new_id)}/{rest}')
         if type == 'old':
             if not article.subreddit_slow.can_view(c.user):
                 self.abort403()
 
-            new_url = "/%s/%s/%s" % \
-                      (dest, article._id36,
-                       quote_plus(title_to_url(article.title).encode('utf-8')))
+            new_url = f"/{dest}/{article._id36}/{quote_plus(title_to_url(article.title).encode('utf-8'))}"
             if not c.default_sr:
-                new_url = "/r/%s%s" % (c.site.name, new_url)
+                new_url = f"/r/{c.site.name}{new_url}"
             if comment:
-                new_url = new_url + "/%s" % comment._id36
+                new_url = f"{new_url}/{comment._id36}"
             if c.extension:
-                new_url = new_url + "/.%s" % c.extension
+                new_url = f"{new_url}/.{c.extension}"
 
             new_url = new_url + query_string(request.GET)
 
@@ -130,7 +128,7 @@ class FrontController(RedditController):
         links, first, last, before, after = builder.get_items()
 
         if links:
-            return self.redirect(add_sr("/tb/" + links[0]._id36))
+            return self.redirect(add_sr(f"/tb/{links[0]._id36}"))
         else:
             return self.redirect(add_sr('/'))
 
@@ -151,7 +149,7 @@ class FrontController(RedditController):
         if not thing:
             try:
                 link = Link._byID36(oldid36)
-                return self.redirect('/details/' + link._fullname)
+                return self.redirect(f'/details/{link._fullname}')
             except (NotFound, ValueError):
                 abort(404)
 
@@ -263,14 +261,11 @@ class FrontController(RedditController):
         if embed_key:
             embeds.set_up_embed(embed_key, sr, comment, showedits=showedits)
 
-        # Temporary hook until IAMA app "OP filter" is moved from partners
-        # Not to be open-sourced
-        page = hooks.get_hook("comments_page.override").call_until_return(
+        if page := hooks.get_hook("comments_page.override").call_until_return(
             controller=self,
             article=article,
             limit=limit,
-        )
-        if page:
+        ):
             return page
 
         # If there is a focal comment, communicate down to
@@ -348,11 +343,7 @@ class FrontController(RedditController):
 
         # insert reply box only for logged in user
         if c.user_is_loggedin and can_comment_link(article) and not is_api():
-            #no comment box for permalinks
-            display = False
-            if not comment and article._age < sr.archive_age:
-                display = True
-
+            display = not comment and article._age < sr.archive_age
             if article.promoted:
                 geotargeted, city_target = promote.is_geotargeted_promo(article)
                 if geotargeted:
@@ -379,10 +370,7 @@ class FrontController(RedditController):
         suggested_sort_active = False
         suggested_sort = article.sort_if_suggested() if feature.is_enabled('default_sort') else None
         if article.contest_mode:
-            if c.user_is_loggedin and sr.is_moderator(c.user):
-                sort = "top"
-            else:
-                sort = "random"
+            sort = "top" if c.user_is_loggedin and sr.is_moderator(c.user) else "random"
         elif suggested_sort and 'sort' not in request.params:
                 sort = suggested_sort
                 suggested_sort_active = True
@@ -424,14 +412,16 @@ class FrontController(RedditController):
             suggested_sort=suggested_sort,
         )
 
-        res = LinkInfoPage(link=article, comment=comment,
-                           content=displayPane,
-                           page_classes=['comments-page'],
-                           subtitle=subtitle,
-                           subtitle_buttons=subtitle_buttons,
-                           nav_menus=[sort_menu, link_settings],
-                           infotext=infotext).render()
-        return res
+        return LinkInfoPage(
+            link=article,
+            comment=comment,
+            content=displayPane,
+            page_classes=['comments-page'],
+            subtitle=subtitle,
+            subtitle_buttons=subtitle_buttons,
+            nav_menus=[sort_menu, link_settings],
+            infotext=infotext,
+        ).render()
 
     def _add_show_comments_link(self, array, article, num, max_comm, gold=False):
         if num == max_comm:
@@ -443,11 +433,7 @@ class FrontController(RedditController):
 
         limit_param = "?limit=%d" % max_comm
 
-        if gold:
-            link_class = "gold"
-        else:
-            link_class = ""
-
+        link_class = "gold" if gold else ""
         more_link = article.make_permalink_slow() + limit_param
         array.append( (link_text, more_link, link_class) )
 
@@ -458,11 +444,11 @@ class FrontController(RedditController):
         title = _('create a subreddit')
         captcha = Captcha() if c.user.needs_captcha() else None
         content = CreateSubreddit(name=name or '', captcha=captcha)
-        res = FormPage(_("create a subreddit"),
-                       content=content,
-                       captcha=captcha,
-                       ).render()
-        return res
+        return FormPage(
+            _("create a subreddit"),
+            content=content,
+            captcha=captcha,
+        ).render()
 
     @pagecache_policy(PAGECACHE_POLICY.LOGGEDIN_AND_LOGGEDOUT)
     @require_oauth2_scope("modconfig")
@@ -477,8 +463,7 @@ class FrontController(RedditController):
         if not isinstance(c.site, FakeSubreddit):
             c.site = Subreddit._byID(c.site._id, data=True, stale=False)
 
-        url = Reddit.get_subreddit_stylesheet_url(c.site)
-        if url:
+        if url := Reddit.get_subreddit_stylesheet_url(c.site):
             return self.redirect(url)
         else:
             self.abort404()
@@ -489,8 +474,7 @@ class FrontController(RedditController):
             query, num=num, after=after, count=count, reverse=reverse,
             wrap=default_thing_wrapper())
         listing = ModActionListing(builder)
-        pane = listing.listing()
-        return pane
+        return listing.listing()
 
     modname_splitter = re.compile('[ ,]+')
 
@@ -523,10 +507,7 @@ class FrontController(RedditController):
             return self.abort404()
 
         if mod:
-            if mod == 'a':
-                modnames = g.admins
-            else:
-                modnames = self.modname_splitter.split(mod)
+            modnames = g.admins if mod == 'a' else self.modname_splitter.split(mod)
             mod = []
             for name in modnames:
                 try:
@@ -630,18 +611,14 @@ class FrontController(RedditController):
                     return False
 
                 verdict = getattr(x, "verdict", None)
-                if verdict is None:
-                    return True # anything without a verdict
-                if x._spam and verdict != 'mod-removed':
-                    return True # spam, unless banned by a moderator
-                return False
+                return True if verdict is None else bool(x._spam and verdict != 'mod-removed')
             elif location == "unmoderated":
                 # banned user, don't show if subreddit pref excludes
                 if x.author._spam and x.subreddit.exclude_banned_modqueue:
                     return False
                 return not getattr(x, 'verdict', None)
             elif location == "edited":
-                return bool(getattr(x, "editted", False))
+                return getattr(x, "editted", False)
             else:
                 raise ValueError
 
@@ -704,13 +681,8 @@ class FrontController(RedditController):
     @validate(VSrModerator(perms='posts'),
               location=nop('location'),
               only=VOneOf('only', ('links', 'comments')))
-    @api_doc(
-        api_section.moderation,
-        uses_site=True,
-        uri='/about/{location}',
-        uri_variants=['/about/' + loc for loc in
-                      ('reports', 'spam', 'modqueue', 'unmoderated', 'edited')],
-    )
+    @api_doc(api_section.moderation, uses_site=True, uri='/about/{location}', uri_variants=[f'/about/{loc}' for loc in
+                      ('reports', 'spam', 'modqueue', 'unmoderated', 'edited')])
     def GET_spamlisting(self, location, only, num, after, reverse, count):
         """Return a listing of posts relevant to moderators.
 
@@ -846,12 +818,12 @@ class FrontController(RedditController):
         query = _force_unicode(query)
         query = query[:1024]
         query = u"|".join(query.split())
-        query = u"title:'%s'" % query
+        query = f"title:'{query}'"
         rel_range = timedelta(days=3)
         start = int(time_module.mktime((article._date - rel_range).utctimetuple()))
         end = int(time_module.mktime((article._date + rel_range).utctimetuple()))
         nsfw = u"nsfw:0" if not (article.over_18 or article._nsfw.findall(article.title)) else u""
-        query = u"(and %s timestamp:%s..%s %s)" % (query, start, end, nsfw)
+        query = f"(and {query} timestamp:{start}..{end} {nsfw})"
         q = SearchQuery(query, raw_sort="-text_relevance",
                         syntax="cloudsearch")
         pane = self._search(q, num=num, after=after, reverse=reverse,
@@ -883,13 +855,14 @@ class FrontController(RedditController):
         num_duplicates = len(builder.get_items()[0])
         listing = LinkListing(builder).listing()
 
-        res = LinkInfoPage(link=article,
-                           comment=None,
-                           num_duplicates=num_duplicates,
-                           content=listing,
-                           page_classes=['other-discussions-page'],
-                           subtitle=_('other discussions')).render()
-        return res
+        return LinkInfoPage(
+            link=article,
+            comment=None,
+            num_duplicates=num_duplicates,
+            content=listing,
+            page_classes=['other-discussions-page'],
+            subtitle=_('other discussions'),
+        ).render()
 
 
     @base_listing
@@ -904,14 +877,15 @@ class FrontController(RedditController):
                                              after=after, count=count,
                                              skip_deleted_authors=False)
 
-        res = SubredditsPage(content=spane,
-                             prev_search=query,
-                             elapsed_time=etime,
-                             # update if we ever add sorts
-                             search_params={},
-                             title=_("search results"),
-                             simple=True).render()
-        return res
+        return SubredditsPage(
+            content=spane,
+            prev_search=query,
+            elapsed_time=etime,
+            # update if we ever add sorts
+            search_params={},
+            title=_("search results"),
+            simple=True,
+        ).render()
 
     search_help_page = "/wiki/search"
     verify_langs_regex = re.compile(r"\A[a-z][a-z](,[a-z][a-z])*\Z")
@@ -927,15 +901,10 @@ class FrontController(RedditController):
                    restrict_sr, syntax):
         """Search links page."""
         if query and '.' in query:
-            url = sanitize_url(query, require_scheme=True)
-            if url:
+            if url := sanitize_url(query, require_scheme=True):
                 return self.redirect("/submit" + query_string({'url':url}))
 
-        if not restrict_sr:
-            site = DefaultSR()
-        else:
-            site = c.site
-
+        site = DefaultSR() if not restrict_sr else c.site
         if not syntax:
             syntax = SearchQuery.default_syntax
 
@@ -972,22 +941,23 @@ class FrontController(RedditController):
                     cleanup_message = strings.completely_invalid_search_query
 
             check_cheating("search")
-            res = SearchPage(_('search results'), query, etime,
-                             content=spane,
-                             nav_menus=[SearchSortMenu(default=sort),
-                                        TimeMenu(default=recent)],
-                             search_params=dict(sort=sort, t=recent),
-                             infotext=cleanup_message,
-                             simple=False, site=c.site,
-                             restrict_sr=restrict_sr,
-                             syntax=syntax,
-                             converted_data=q.converted_data,
-                             facets=results.subreddit_facets,
-                             sort=sort,
-                             recent=recent,
-                             ).render()
-
-            return res
+            return SearchPage(
+                _('search results'),
+                query,
+                etime,
+                content=spane,
+                nav_menus=[SearchSortMenu(default=sort), TimeMenu(default=recent)],
+                search_params=dict(sort=sort, t=recent),
+                infotext=cleanup_message,
+                simple=False,
+                site=c.site,
+                restrict_sr=restrict_sr,
+                syntax=syntax,
+                converted_data=q.converted_data,
+                facets=results.subreddit_facets,
+                sort=sort,
+                recent=recent,
+            ).render()
         except SearchException + (socket.error,) as e:
             return self.search_fail(e)
 
@@ -1036,22 +1006,20 @@ class FrontController(RedditController):
         if url and not resubmit:
             # check to see if the url has already been submitted
             listing = hot_links_by_url_listing(url, sr=c.site)
-            links = listing.things
-
-            if links and len(links) == 1:
-                # redirect the user to the existing link's comments
-                existing_submission_url = links[0].already_submitted_link(url)
-                return self.redirect(existing_submission_url)
-            elif links:
-                # show the user a listing of all the other links with this url
-                # an infotext to resubmit it
-                resubmit_url = Link.resubmit_link(url)
-                sr_resubmit_url = add_sr(resubmit_url)
-                infotext = strings.multiple_submitted % sr_resubmit_url
-                res = BoringPage(
-                    _("seen it"), content=listing, infotext=infotext).render()
-                return res
-
+            if links := listing.things:
+                if len(links) == 1:
+                    # redirect the user to the existing link's comments
+                    existing_submission_url = links[0].already_submitted_link(url)
+                    return self.redirect(existing_submission_url)
+                else:
+                    # show the user a listing of all the other links with this url
+                    # an infotext to resubmit it
+                    resubmit_url = Link.resubmit_link(url)
+                    sr_resubmit_url = add_sr(resubmit_url)
+                    infotext = strings.multiple_submitted % sr_resubmit_url
+                    return BoringPage(
+                        _("seen it"), content=listing, infotext=infotext
+                    ).render()
         if not c.user_is_loggedin:
             raise UserRequiredException
 
@@ -1138,10 +1106,7 @@ class FrontController(RedditController):
         c.used_cache = True
         sup.set_expires_header()
 
-        if c.extension == 'json':
-            return sup.sup_json(period)
-        else:
-            return self.abort404()
+        return sup.sup_json(period) if c.extension == 'json' else self.abort404()
 
 
     @require_oauth2_scope("modtraffic")
@@ -1261,7 +1226,7 @@ class FrontController(RedditController):
         award = Award._by_fullname(token.awardfullname)
         trophy, preexisting = Trophy.claim(c.user, token.uid, award,
                                            token.description, token.url)
-        redirect = '/awards/received?trophy=' + trophy._id36
+        redirect = f'/awards/received?trophy={trophy._id36}'
         if preexisting:
             redirect += '&duplicate=true'
         self.redirect(redirect)
@@ -1445,16 +1410,14 @@ class FormsController(RedditController):
         cover).  However, this page is still used for logging the user
         in during submission or voting from the bookmarklets."""
 
-        if (c.user_is_loggedin and
-            not request.environ.get('extension') == 'embed'):
+        if c.user_is_loggedin and request.environ.get('extension') != 'embed':
             return self.redirect(dest)
         return LoginPage(dest=dest).render()
 
 
     @validate(dest=VDestination())
     def GET_register(self, dest):
-        if (c.user_is_loggedin and
-            not request.environ.get('extension') == 'embed'):
+        if c.user_is_loggedin and request.environ.get('extension') != 'embed':
             return self.redirect(dest)
         return RegisterPage(dest=dest).render()
 
@@ -1482,7 +1445,7 @@ class FormsController(RedditController):
     def GET_adminon(self, dest):
         """Enable admin interaction with site"""
         #check like this because c.user_is_admin is still false
-        if not c.user.name in g.admins:
+        if c.user.name not in g.admins:
             return self.abort404()
 
         return AdminModeInterstitial(dest=dest).render()
@@ -1491,7 +1454,7 @@ class FormsController(RedditController):
               dest=VDestination())
     def GET_adminoff(self, dest):
         """disable admin interaction with site."""
-        if not c.user.name in g.admins:
+        if c.user.name not in g.admins:
             return self.abort404()
         self.disable_admin_mode(c.user)
         return self.redirect(dest)
@@ -1546,7 +1509,7 @@ class FormsController(RedditController):
         if c.user != payment_blob['buyer']:
             self.abort404()
 
-        if not payment_blob['goldtype'] == 'gift':
+        if payment_blob['goldtype'] != 'gift':
             self.abort404()
 
         recipient = payment_blob['recipient']
@@ -1566,11 +1529,7 @@ class FormsController(RedditController):
         months = 1
         price = g.gold_month_price * months
 
-        if isinstance(thing, Comment):
-            desc = thing.body
-        else:
-            desc = thing.markdown_link_slow()
-
+        desc = thing.body if isinstance(thing, Comment) else thing.markdown_link_slow()
         content = CreditGild(
             summary=summary,
             price=price,
@@ -1618,11 +1577,7 @@ class FormsController(RedditController):
             start_over = True
 
         if not c.user_is_loggedin:
-            if goldtype != "code":
-                start_over = True
-            elif months is None or months < 1:
-                start_over = True
-            elif not email:
+            if goldtype != "code" or months is None or months < 1 or not email:
                 start_over = True
         elif goldtype == "autorenew":
             if period is None:
@@ -1660,13 +1615,13 @@ class FormsController(RedditController):
             if is_payment:
                 g.stats.simple_event("gold.checkout_redirects.to_form")
                 qs = query_string(request.GET)
-                return self.redirect('/gold' + qs)
+                return self.redirect(f'/gold{qs}')
 
             can_subscribe = (c.user_is_loggedin and
                              not c.user.has_gold_subscription)
             if not can_subscribe and goldtype == "autorenew":
                 self.redirect("/creddits", code=302)
-                
+
             return BoringPage(_("reddit gold"),
                               show_sidebar=False,
                               content=Gold(goldtype, period, months, signed,
@@ -1683,7 +1638,7 @@ class FormsController(RedditController):
             if not is_payment:
                 g.stats.simple_event("gold.checkout_redirects.to_payment")
                 qs = query_string(request.GET)
-                return self.redirect('/gold/payment' + qs)
+                return self.redirect(f'/gold/payment{qs}')
 
             payment_blob = dict(goldtype=goldtype,
                                 status="initialized")

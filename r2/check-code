@@ -159,7 +159,7 @@ def extract_errtype(violation, tool):
 def make_test_class(tool, filepath):
     no_ext, ext = os.path.splitext(filepath)
     test_class_suffix = no_ext.replace(os.path.sep, '_')
-    return tool + '.' + test_class_suffix
+    return f'{tool}.{test_class_suffix}'
 
 
 def extract_line_info(reportline, filepath, tool):
@@ -174,7 +174,7 @@ def extract_line_info(reportline, filepath, tool):
         line_num = ''
     else:
         line_num = file_info[1]
-    report_entry = {
+    return {
         'file': filepath,
         'test_class': make_test_class(tool, filepath),
         'line': line_num,
@@ -182,7 +182,6 @@ def extract_line_info(reportline, filepath, tool):
         'errtype': extract_errtype(violation, tool),
         'tool': tool,
     }
-    return report_entry
 
 
 def generate_report(toolname, files=None):
@@ -203,8 +202,7 @@ def generate_report(toolname, files=None):
         ws_root = get_root()
         ws_filepath = os.path.relpath(filepath, ws_root)
         for line in lines:
-            line = extract_line_info(line, ws_filepath, toolname)
-            if line:
+            if line := extract_line_info(line, ws_filepath, toolname):
                 report.append(line)
     return report
 
@@ -274,9 +272,9 @@ def junitize(report):
             file_errors = by_file.setdefault(violation['file'], [])
             file_errors.append(violation)
     violations = etree.Element("testsuites")
-    for filename in by_file:
+    for value in by_file.values():
         file_errs = etree.SubElement(violations, "testsuite")
-        for violation in by_file[filename]:
+        for violation in value:
             entry = etree.SubElement(file_errs, "testcase")
             entry.attrib['classname'] = violation['test_class']
             entry.attrib['name'] = violation['line']
@@ -288,8 +286,7 @@ def junitize(report):
 
 def make_errname(violation):
     """Create a unique "test name" for this violation."""
-    name = '.'.join((violation['errtype'], violation['line']))
-    return name
+    return '.'.join((violation['errtype'], violation['line']))
 
 
 def diff_report(options):

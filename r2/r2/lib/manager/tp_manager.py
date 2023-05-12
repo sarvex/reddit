@@ -66,7 +66,7 @@ class tp_manager:
             if template:
                 return template
 
-        filename = "/%s.%s" % (name, style)
+        filename = f"/{name}.{style}"
         try:
             template = g.mako_lookup.get_template(filename)
         except TemplateLookupException:

@@ -243,7 +243,7 @@ def process_pixel_log(log_path, fast=False):
     month_date = '%s-%02d' % (year, month)
 
     # All logs from this day use the same jobflow
-    jobflow_name = 'Traffic Processing (%s)' % day_date
+    jobflow_name = f'Traffic Processing ({day_date})'
 
     output_path = os.path.join(PROCESSED_DIR, 'hour', hour_date)
     extract_hour(emr_connection, jobflow_name, log_path, output_path,
@@ -258,7 +258,7 @@ def process_pixel_log(log_path, fast=False):
 
     if hour == 23 or (not fast and (hour == 0 or hour % 4 == 3)):
         # Don't aggregate and report day on every hour
-        input_path = os.path.join(PROCESSED_DIR, 'hour', '%s-*' % day_date)
+        input_path = os.path.join(PROCESSED_DIR, 'hour', f'{day_date}-*')
         output_path = os.path.join(AGGREGATE_DIR, day_date)
         aggregate_interval(emr_connection, jobflow_name, input_path,
                            output_path, log_uri=AWS_LOG_DIR)
@@ -267,7 +267,7 @@ def process_pixel_log(log_path, fast=False):
 
     if hour == 23:
         # Special tasks for final hour of the day
-        input_path = os.path.join(PROCESSED_DIR, 'hour', '%s-*' % day_date)
+        input_path = os.path.join(PROCESSED_DIR, 'hour', f'{day_date}-*')
         output_path = os.path.join(PROCESSED_DIR, 'day', day_date)
         coalesce_interval(emr_connection, jobflow_name, input_path,
                           output_path, log_uri=AWS_LOG_DIR)
@@ -279,8 +279,8 @@ def process_pixel_log(log_path, fast=False):
 
 
 def aggregate_month(month_date):
-    jobflow_name = 'Traffic Processing (%s)' % month_date
-    input_path = os.path.join(PROCESSED_DIR, 'day', '%s-*' % month_date)
+    jobflow_name = f'Traffic Processing ({month_date})'
+    input_path = os.path.join(PROCESSED_DIR, 'day', f'{month_date}-*')
     output_path = os.path.join(AGGREGATE_DIR, month_date)
     aggregate_interval(emr_connection, jobflow_name, input_path, output_path,
                        log_uri=AWS_LOG_DIR, slave_instance_type='m2.2xlarge')

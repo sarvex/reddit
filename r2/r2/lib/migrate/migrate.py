@@ -245,8 +245,7 @@ def port_cassaurls(after_id=None, estimate=15231317):
     for chunk in chunks:
         with LinksByUrl._cf.batch(write_consistency_level = CL.ONE) as b:
             for l in chunk:
-                k = LinksByUrl._key_from_url(l.url)
-                if k:
+                if k := LinksByUrl._key_from_url(l.url):
                     b.insert(k, {l._id36: l._id36})
 
 def port_deleted_links(after_id=None):

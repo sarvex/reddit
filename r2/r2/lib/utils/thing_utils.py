@@ -30,7 +30,7 @@ def make_last_modified():
     return last_modified
 
 def last_modified_key(thing, action):
-    return 'last_%s_%s' % (str(action), thing._fullname)
+    return f'last_{str(action)}_{thing._fullname}'
 
 def last_modified_date(thing, action, set_if_empty = True):
     """Returns the date that should be sent as the last-modified header."""
@@ -55,7 +55,7 @@ def last_modified_multi(things, action):
     cache = g.permacache
 
     things = tup(things)
-    keys = dict((last_modified_key(thing, action), thing) for thing in things)
+    keys = {last_modified_key(thing, action): thing for thing in things}
 
     last_modified = cache.get_multi(keys.keys())
-    return dict((keys[k], v) for k, v in last_modified.iteritems())
+    return {keys[k]: v for k, v in last_modified.iteritems()}

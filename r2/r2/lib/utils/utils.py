@@ -96,7 +96,7 @@ class Storage(dict):
             raise AttributeError, k
 
     def __repr__(self):
-        return '<Storage ' + dict.__repr__(self) + '>'
+        return f'<Storage {dict.__repr__(self)}>'
 
 storage = Storage
 
@@ -123,24 +123,19 @@ class Results():
         return self.rp.rowcount
 
     def _fetch(self, res):
-        if self.do_batch:
-            return self.fn(res)
-        else:
-            return [self.fn(row) for row in res]
+        return self.fn(res) if self.do_batch else [self.fn(row) for row in res]
 
     def fetchall(self):
         return self._fetch(self.rp.fetchall())
 
     def fetchmany(self, n):
-        rows = self._fetch(self.rp.fetchmany(n))
-        if rows:
+        if rows := self._fetch(self.rp.fetchmany(n)):
             return rows
         else:
             raise StopIteration
 
     def fetchone(self):
-        row = self.rp.fetchone()
-        if row:
+        if row := self.rp.fetchone():
             if self.do_batch:
                 row = tup(row)
                 return self.fn(row)[0]
@@ -157,7 +152,11 @@ def strip_www(domain):
 
 def is_subdomain(subdomain, base):
     """Check if a domain is equal to or a subdomain of a base domain."""
-    return subdomain == base or (subdomain is not None and subdomain.endswith('.' + base))
+    return (
+        subdomain == base
+        or subdomain is not None
+        and subdomain.endswith(f'.{base}')
+    )
 
 r_base_url = re.compile("(?i)(?:.+?://)?(?:www[\d]*\.)?([^#]*[^#/])/?")
 def base_url(url):
@@ -193,9 +192,7 @@ def extract_subdomain(host=None, base_domain=None):
     end_index = host.find(base_domain) - 1 # For the conjoining dot.
     # Is either the requested domain the same as the base domain, or the
     # base is not a substring?
-    if end_index < 0:
-        return ''
-    return host[:end_index]
+    return '' if end_index < 0 else host[:end_index]
 
 r_path_component = re.compile(".*?/(.*)")
 def path_component(s):
@@ -255,10 +252,10 @@ def extract_title(data):
 
     title = None
 
-    # try to find an og:title meta tag to use
-    og_title = (head_soup.find("meta", attrs={"property": "og:title"}) or
-                head_soup.find("meta", attrs={"name": "og:title"}))
-    if og_title:
+    if og_title := (
+        head_soup.find("meta", attrs={"property": "og:title"})
+        or head_soup.find("meta", attrs={"name": "og:title"})
+    ):
         title = og_title.get("content")
 
     # if that failed, look for a <title> tag to use instead
@@ -309,7 +306,7 @@ def sanitize_url(url, require_scheme=False, valid_schemes=VALID_SCHEMES):
         u = urlparse(url)
         # first pass: make sure a scheme has been specified
         if not require_scheme and not u.scheme:
-            url = 'http://' + url
+            url = f'http://{url}'
             u = urlparse(url)
     except ValueError:
         return None
@@ -350,10 +347,9 @@ def trunc_string(text, max_length, suffix='...'):
     """
     if len(text) <= max_length:
         return text
-    else:
-        hard_truncated = text[:(max_length - len(suffix))]
-        word_truncated = hard_truncated.rsplit(' ', 1)[0]
-        return word_truncated + suffix
+    hard_truncated = text[:(max_length - len(suffix))]
+    word_truncated = hard_truncated.rsplit(' ', 1)[0]
+    return word_truncated + suffix
 
 # Truncate a time to a certain number of minutes
 # e.g, trunc_time(5:52, 30) == 5:30
@@ -371,7 +367,7 @@ def trunc_time(time, mins, hours=None):
                         microsecond = 0)
 
 def long_datetime(datetime):
-    return datetime.astimezone(g.tz).ctime() + " " + str(g.tz)
+    return f"{datetime.astimezone(g.tz).ctime()} {str(g.tz)}"
 
 def median(l):
     if l:
@@ -386,13 +382,10 @@ def query_string(dict):
             try:
                 k = url_escape(_force_unicode(k))
                 v = url_escape(_force_unicode(v))
-                pairs.append(k + '=' + v)
+                pairs.append(f'{k}={v}')
             except UnicodeDecodeError:
                 continue
-    if pairs:
-        return '?' + '&'.join(pairs)
-    else:
-        return ''
+    return '?' + '&'.join(pairs) if pairs else ''
 
 class UrlParser(object):
     """
@@ -471,7 +464,7 @@ class UrlParser(object):
         base = pieces[-1].split('.')
         base = '.'.join(base[:-1] if len(base) > 1 else base)
         if extension:
-            base += '.' + extension
+            base += f'.{extension}'
         dirs.append(base)
         self.path =  '/'.join(dirs)
         return self
@@ -528,17 +521,18 @@ class UrlParser(object):
         from pylons import g
         from r2.models import Subreddit, Sub, NotFound, DefaultSR
         try:
-            if (not self.hostname or
-                    is_subdomain(self.hostname, g.domain) or
-                    self.hostname.startswith(g.domain)):
-                if self.path.startswith('/r/'):
-                    return Subreddit._by_name(self.path.split('/')[2])
-                elif self.path.startswith(('/subreddits/', '/reddits/')):
-                    return Sub
-                else:
-                    return DefaultSR()
-            elif self.hostname:
+            if (
+                self.hostname
+                and not is_subdomain(self.hostname, g.domain)
+                and not self.hostname.startswith(g.domain)
+            ):
                 return Subreddit._by_domain(self.hostname)
+            if self.path.startswith('/r/'):
+                return Subreddit._by_name(self.path.split('/')[2])
+            elif self.path.startswith(('/subreddits/', '/reddits/')):
+                return Sub
+            else:
+                return DefaultSR()
         except NotFound:
             pass
         return None
@@ -560,13 +554,17 @@ class UrlParser(object):
         )
         # Handle backslash trickery like /\example.com/ being treated as
         # equal to //example.com/ by some browsers
-        if not self.hostname and not self.scheme and self.path:
-            if self.path.startswith("/\\"):
-                return False
+        if (
+            not self.hostname
+            and not self.scheme
+            and self.path
+            and self.path.startswith("/\\")
+        ):
+            return False
         if not subdomain or not self.hostname or not g.offsite_subdomains:
             return subdomain
         return not any(
-            self.hostname.startswith(subdomain + '.')
+            self.hostname.startswith(f'{subdomain}.')
             for subdomain in g.offsite_subdomains
         )
 
@@ -589,7 +587,7 @@ class UrlParser(object):
         if not self.hostname:
             return ""
         elif getattr(self, "port", None):
-            return self.hostname + ":" + str(self.port)
+            return f"{self.hostname}:{str(self.port)}"
         return self.hostname
 
     def mk_cname(self, require_frame = True, subreddit = None, port = None):
@@ -620,7 +618,7 @@ class UrlParser(object):
             # remove the subreddit reference
             self.path = lstrips(self.path, subreddit.path)
             if not self.path.startswith('/'):
-                self.path = '/' + self.path
+                self.path = f'/{self.path}'
 
         return self
 
@@ -638,7 +636,7 @@ class UrlParser(object):
         self.update_query(**{self.cname_get:random.random()})
 
     def __repr__(self):
-        return "<URL %s>" % repr(self.unparse())
+        return f"<URL {repr(self.unparse())}>"
 
     def domain_permutations(self, fragments=False, subdomains=True):
         """
@@ -657,7 +655,7 @@ class UrlParser(object):
 
             if subdomains:
                 for x in xrange(len(r)-1):
-                    ret.add('.'.join(r[x:len(r)]))
+                    ret.add('.'.join(r[x:]))
 
             if fragments:
                 for x in r:
@@ -691,10 +689,7 @@ def url_is_embeddable_image(url):
     parsed_url = UrlParser(url)
 
     if parsed_url.path_extension().lower() in {"jpg", "gif", "png", "jpeg"}:
-        if parsed_url.hostname not in g.known_image_domains:
-            return False
-        return True
-
+        return parsed_url.hostname in g.known_image_domains
     return False
 
 
@@ -747,7 +742,7 @@ def cols(lst, ncols):
     rows. e.g. cols('abcdef', 2) returns (('a', 'd'), ('b', 'e'), ('c',
     'f'))"""
     nrows = int(math.ceil(1.*len(lst) / ncols))
-    lst = lst + [None for i in range(len(lst), nrows*ncols)]
+    lst = lst + [None for _ in range(len(lst), nrows*ncols)]
     cols = [lst[i:i+nrows] for i in range(0, nrows*ncols, nrows)]
     rows = zip(*cols)
     rows = [filter(lambda x: x is not None, r) for r in rows]
@@ -770,24 +765,20 @@ def fetch_things(t_class,since,until,batch_fn=None,
                      t_class.c._date <  until,
                      t_class.c._spam == (True,False)]
                     + list(query_params))
-    query_dict   = {'sort':  asc('_date'),
-                    'limit': 100,
-                    'data':  True}
-    query_dict.update(extra_query_dict)
-
+    query_dict = {
+        'sort': asc('_date'),
+        'limit': 100,
+        'data': True,
+    } | extra_query_dict
     q = t_class._query(*query_params,
                         **query_dict)
 
     orig_rules = deepcopy(q._rules)
 
-    things = list(q)
-    while things:
-        things = batch_fn(things)
-        for t in things:
-            yield t
+    while things := list(q):
+        yield from batch_fn(things)
         q._rules = deepcopy(orig_rules)
         q._after(t)
-        things = list(q)
 
 def fetch_things2(query, chunk_size = 100, batch_fn = None, chunks = False):
     """Incrementally run query with a limit of chunk_size until there are
@@ -813,9 +804,7 @@ def fetch_things2(query, chunk_size = 100, batch_fn = None, chunks = False):
         if chunks:
             yield items
         else:
-            for i in items:
-                yield i
-
+            yield from items
         if not done:
             query._rules = deepcopy(orig_rules)
             query._after(after)
@@ -921,9 +910,8 @@ def UniqueIterator(iterator, key = lambda x: x):
         k = key(x)
         if k in so_far:
             return False
-        else:
-            so_far.add(k)
-            return True
+        so_far.add(k)
+        return True
 
     return IteratorFilter(iterator, no_dups)
 
@@ -979,12 +967,11 @@ def common_subdomain(domain1, domain2):
 
     if domain1 == domain2:
         return domain1
-    else:
-        dom = domain1.split(".")
-        for i in range(len(dom), 1, -1):
-            d = '.'.join(dom[-i:])
-            if domain2.endswith(d):
-                return d
+    dom = domain1.split(".")
+    for i in range(len(dom), 1, -1):
+        d = '.'.join(dom[-i:])
+        if domain2.endswith(d):
+            return d
     return ""
 
 
@@ -1053,14 +1040,10 @@ class TimeoutFunction:
 
 
 def to_date(d):
-    if isinstance(d, datetime):
-        return d.date()
-    return d
+    return d.date() if isinstance(d, datetime) else d
 
 def to_datetime(d):
-    if type(d) == date:
-        return datetime(d.year, d.month, d.day)
-    return d
+    return datetime(d.year, d.month, d.day) if type(d) == date else d
 
 def in_chunks(it, size=25):
     chunk = []
@@ -1096,6 +1079,7 @@ def progress(it, verbosity=100, key=repr, estimate=None, persec=True):
 
     def timedelta_to_seconds(td):
         return td.days * (24*60*60) + td.seconds + (float(td.microseconds) / 1000000)
+
     def format_timedelta(td, sep=''):
         ret = []
         s = timedelta_to_seconds(td)
@@ -1126,11 +1110,10 @@ def progress(it, verbosity=100, key=repr, estimate=None, persec=True):
             return '0s'
 
         return ('-' if neg else '') + sep.join(ret)
+
     def format_datetime(dt, show_date=False):
-        if show_date:
-            return dt.strftime('%Y-%m-%d %H:%M')
-        else:
-            return dt.strftime('%H:%M:%S')
+        return dt.strftime('%Y-%m-%d %H:%M') if show_date else dt.strftime('%H:%M:%S')
+
     def deq(dt1, dt2):
         "Indicates whether the two datetimes' dates describe the same (day,month,year)"
         d1, d2 = dt1.date(), dt2.date()
@@ -1173,18 +1156,12 @@ def progress(it, verbosity=100, key=repr, estimate=None, persec=True):
             count_str = ('%d/%d %.2f%%'
                          % (seen, estimate, float(seen)/estimate*100))
             completion_str = format_datetime(completion, not deq(completion,now))
-            estimate_str = (' (%s remaining; completion %s)'
-                            % (format_timedelta(remaining),
-                               completion_str))
+            estimate_str = f' ({format_timedelta(remaining)} remaining; completion {completion_str})'
         else:
             count_str = '%d' % seen
             estimate_str = ''
 
-        if key:
-            key_str = ': %s' % key(item)
-        else:
-            key_str = ''
-
+        key_str = f': {key(item)}' if key else ''
         # unlike the estimate, the persec count is the number per
         # second for *this* batch only, without smoothing
         if persec and thischunk_seconds > 0:
@@ -1299,8 +1276,7 @@ def extract_urls_from_markdown(md):
     links = SoupStrainer("a")
 
     for link in BeautifulSoup(html, parseOnlyThese=links):
-        url = link.get('href')
-        if url:
+        if url := link.get('href'):
             yield url
 
 
@@ -1335,10 +1311,7 @@ def summarize_markdown(md):
 def find_containing_network(ip_ranges, address):
     """Find an IP network that contains the given address."""
     addr = ipaddress.ip_address(address)
-    for network in ip_ranges:
-        if addr in network:
-            return network
-    return None
+    return next((network for network in ip_ranges if addr in network), None)
 
 
 def is_throttled(address):
@@ -1421,10 +1394,10 @@ class GoldPrice(object):
         return type(self)(self.decimal / other)
 
     def __str__(self):
-        return "$%s" % self.decimal.quantize(Decimal("1.00"))
+        return f'${self.decimal.quantize(Decimal("1.00"))}'
 
     def __repr__(self):
-        return "%s(%s)" % (type(self).__name__, self)
+        return f"{type(self).__name__}({self})"
 
     @property
     def pennies(self):
@@ -1457,7 +1430,7 @@ def canonicalize_email(email):
     localpart = localpart.replace(".", "")
     localpart = localpart.partition("+")[0]
 
-    return localpart + "@" + domain
+    return f"{localpart}@{domain}"
 
 
 def precise_format_timedelta(delta, locale, threshold=.85, decimals=2):
@@ -1469,7 +1442,7 @@ def precise_format_timedelta(delta, locale, threshold=.85, decimals=2):
         if value >= threshold:
             plural_form = locale.plural_form(value)
             pattern = None
-            for choice in (unit + ':medium', unit):
+            for choice in (f'{unit}:medium', unit):
                 patterns = locale._data['unit_patterns'].get(choice)
                 if patterns is not None:
                     pattern = patterns[plural_form]
@@ -1477,7 +1450,7 @@ def precise_format_timedelta(delta, locale, threshold=.85, decimals=2):
             if pattern is None:
                 return u''
             decimals = int(decimals)
-            format_string = "%." + str(decimals) + "f"
+            format_string = f"%.{decimals}f"
             return pattern.replace('{0}', format_string % value)
     return u''
 

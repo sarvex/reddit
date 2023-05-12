@@ -59,7 +59,6 @@ def static(path, absolute=False, mangle_name=True):
     """
     dirname, filename = os.path.split(path)
     extension = os.path.splitext(filename)[1]
-    is_text = extension in static_text_extensions
     should_cache_bust = False
 
     path_components = []
@@ -71,6 +70,7 @@ def static(path, absolute=False, mangle_name=True):
         path_components.append(c.site.static_path)
 
         if g.uncompressedJS:
+            is_text = extension in static_text_extensions
             # unminified static files are in type-specific subdirectories
             if not dirname and is_text:
                 path_components.append(static_text_extensions[extension])
@@ -90,7 +90,7 @@ def static(path, absolute=False, mangle_name=True):
     query = None
     if path and should_cache_bust:
         file_id = static_mtime(actual_path) or random.randint(0, 1000000)
-        query = 'v=' + str(file_id)
+        query = f'v={str(file_id)}'
 
     return urlparse.urlunsplit((
         None,
@@ -131,43 +131,37 @@ def js_config(extra_config=None):
 
     controller_name = request.environ['pylons.routes_dict']['controller']
     action_name = request.environ['pylons.routes_dict']['action']
-    mac = hmac.new(g.secrets["action_name"], controller_name + '.' + action_name, hashlib.sha1)
+    mac = hmac.new(
+        g.secrets["action_name"],
+        f'{controller_name}.{action_name}',
+        hashlib.sha1,
+    )
     verification = mac.hexdigest()
 
     config = {
-        # is the user logged in?
         "logged": logged,
-        # logged in user's id
         "user_id": user_id,
-        # the subreddit's name (for posts)
         "post_site": c.site.name if not c.default_sr else "",
-        # the user's voting hash
         "modhash": c.modhash or False,
-        # the current rendering style
         "renderstyle": c.render_style,
-
-        # they're welcome to try to override this in the DOM because we just
-        # disable the features server-side if applicable
         'store_visits': gold and c.user.pref_store_visits,
-
-        # current domain
-        "cur_domain": get_domain(cname=c.frameless_cname, subreddit=False, no_www=True),
-        # where do ajax requests go?
+        "cur_domain": get_domain(
+            cname=c.frameless_cname, subreddit=False, no_www=True
+        ),
         "ajax_domain": get_domain(cname=c.authorized_cname, subreddit=False),
         "stats_domain": g.stats_domain or '',
         "stats_sample_rate": g.stats_sample_rate or 0,
         "extension": c.extension,
-        "https_endpoint": is_subdomain(request.host, g.domain) and g.https_endpoint,
-        # does the client only want to communicate over HTTPS?
+        "https_endpoint": is_subdomain(request.host, g.domain)
+        and g.https_endpoint,
         "https_forced": c.user.https_forced,
-        # debugging?
         "debug": g.debug,
         "send_logs": g.live_config["frontend_logging"],
         "server_time": math.floor(time.time()),
         "status_msg": {
-          "fetching": _("fetching title..."),
-          "submitting": _("submitting..."),
-          "loading": _("loading...")
+            "fetching": _("fetching title..."),
+            "submitting": _("submitting..."),
+            "loading": _("loading..."),
         },
         "is_fake": isinstance(c.site, FakeSubreddit),
         "adtracker_url": g.adtracker_url,
@@ -175,7 +169,9 @@ def js_config(extra_config=None):
         "uitracker_url": g.uitracker_url,
         "eventtracker_url": g.eventtracker_url,
         "anon_eventtracker_url": g.anon_eventtracker_url,
-        "comment_embed_scripts": js.src("comment-embed", absolute=True, mangle_name=False),
+        "comment_embed_scripts": js.src(
+            "comment-embed", absolute=True, mangle_name=False
+        ),
         "static_root": static(''),
         "over_18": bool(c.over18),
         "new_window": bool(c.user.pref_newwindow),
@@ -184,8 +180,8 @@ def js_config(extra_config=None):
         "has_subscribed": logged and c.user.has_subscribed,
         "is_sponsor": logged and c.user_is_sponsor,
         "pageInfo": {
-          "verification": verification,
-          "actionName": controller_name + '.' + action_name,
+            "verification": verification,
+            "actionName": f'{controller_name}.{action_name}',
         },
     }
 
@@ -193,7 +189,7 @@ def js_config(extra_config=None):
         config["uncompressedJS"] = True
 
     if extra_config:
-        config.update(extra_config)
+        config |= extra_config
 
     hooks.get_hook("js_config").call(config=config)
 
@@ -218,18 +214,16 @@ class JSPreload(js.DataSource):
     def use(self):
         hooks.get_hook("js_preload.use").call(js_preload=self)
 
-        if self.data:
-            return js.DataSource.use(self)
-        else:
-            return ''
+        return js.DataSource.use(self) if self.data else ''
 
 
 def class_dict():
     t_cls = [Link, Comment, Message, Subreddit]
     l_cls = [Listing, OrganicListing]
 
-    classes  = [('%s: %s') % ('t'+ str(cl._type_id), cl.__name__ ) for cl in t_cls] \
-             + [('%s: %s') % (cl.__name__, cl._js_cls) for cl in l_cls]
+    classes = [f't{str(cl._type_id)}: {cl.__name__}' for cl in t_cls] + [
+        f'{cl.__name__}: {cl._js_cls}' for cl in l_cls
+    ]
 
     res = ', '.join(classes)
     return unsafe('{ %s }' % res)
@@ -373,11 +367,11 @@ def get_domain(cname = False, subreddit = True, no_www = False):
     site  = c.site
     ccname = c.cname
     if not no_www and domain_prefix:
-        domain = domain_prefix + "." + domain
+        domain = f"{domain_prefix}.{domain}"
     if cname and ccname and site.domain:
         domain = site.domain
     if hasattr(request, "port") and request.port:
-        domain += ":" + str(request.port)
+        domain += f":{str(request.port)}"
     if (not ccname or not cname) and subreddit:
         domain += site.path.rstrip('/')
     return domain
@@ -388,14 +382,13 @@ def dockletStr(context, type, browser):
     # while site_domain will hold the (possibly) cnamed version
     site_domain = get_domain(True)
 
-    if type == "serendipity!":
-        return "http://"+site_domain+"/random"
-    elif type == "submit":
-        return ("javascript:location.href='http://"+site_domain+
-               "/submit?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title)")
-    elif type == "reddit toolbar":
+    if type == "reddit toolbar":
         return ("javascript:%20var%20h%20=%20window.location.href;%20h%20=%20'http://" +
                 site_domain + "/s/'%20+%20escape(h);%20window.location%20=%20h;")
+    elif type == "serendipity!":
+        return f"http://{site_domain}/random"
+    elif type == "submit":
+        return f"javascript:location.href='http://{site_domain}/submit?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title)"
     else:
         # these are the linked/disliked buttons, which we have removed
         # from the UI
@@ -483,23 +476,21 @@ def join_urls(*urls):
 def style_line(button_width = None, bgcolor = "", bordercolor = ""):
     style_line = ''
     bordercolor = c.bordercolor or bordercolor
-    bgcolor     = c.bgcolor or bgcolor
-    if bgcolor:
-        style_line += "background-color: #%s;" % bgcolor
+    if bgcolor := c.bgcolor or bgcolor:
+        style_line += f"background-color: #{bgcolor};"
     if bordercolor:
-        style_line += "border: 1px solid #%s;" % bordercolor
+        style_line += f"border: 1px solid #{bordercolor};"
     if button_width:
-        style_line += "width: %spx;" % button_width
+        style_line += f"width: {button_width}px;"
     return style_line
 
 def choose_width(link, width):
     if width:
         return width - 5
+    if hasattr(link, "_ups"):
+        return 100 + (10 * (len(str(link._ups - link._downs))))
     else:
-        if hasattr(link, "_ups"):
-            return 100 + (10 * (len(str(link._ups - link._downs))))
-        else:
-            return 110
+        return 110
 
 # Appends to the list "attrs" a tuple of:
 # <priority (higher trumps lower), letter,
@@ -563,7 +554,7 @@ def add_attr(attrs, kind, label=None, link=None, cssclass=None, symbol=None):
         if not link:
             raise ValueError ("Need a link")
     else:
-        raise ValueError ("Got weird kind [%s]" % kind)
+        raise ValueError(f"Got weird kind [{kind}]")
 
     attrs.append( (priority, symbol, cssclass, label, link) )
 
@@ -578,7 +569,7 @@ def search_url(query, subreddit, restrict_sr="off", sort=None, recent=None):
         url_query["sort"] = sort
     if recent:
         url_query["t"] = recent
-    path = "/r/%s/search?" % subreddit if subreddit else "/search?"
+    path = f"/r/{subreddit}/search?" if subreddit else "/search?"
     path += urllib.urlencode(url_query)
     return path
 
@@ -609,23 +600,18 @@ def simplified_timesince(date, include_tense=True):
     if date > timeago("1 minute"):
         return _("just now")
 
-    since = []
-    since.append(timesince(date))
+    since = [timesince(date)]
     if include_tense:
         since.append(_("ago"))
     return " ".join(since)
 
 
 def display_link_karma(karma):
-    if not c.user_is_admin:
-        return max(karma, g.link_karma_display_floor)
-    return karma
+    return max(karma, g.link_karma_display_floor) if not c.user_is_admin else karma
 
 
 def display_comment_karma(karma):
-    if not c.user_is_admin:
-        return max(karma, g.comment_karma_display_floor)
-    return karma
+    return karma if c.user_is_admin else max(karma, g.comment_karma_display_floor)
 
 
 def format_html(format_string, *args, **kwargs):

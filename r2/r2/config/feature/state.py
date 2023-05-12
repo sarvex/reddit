@@ -52,7 +52,7 @@ class FeatureState(object):
         :return dict - a dictionary with at least "enabled". May include more
                        depending on the enabled type.
         """
-        config_name = "feature_%s" % name
+        config_name = f"feature_{name}"
 
         config_str = self.world.live_config(config_name)
 
@@ -112,8 +112,4 @@ class FeatureState(object):
             return True
 
         clients = set(cfg.get('oauth_clients', []))
-        if clients and oauth_client and oauth_client in clients:
-            return True
-
-        # Unknown value, default to off.
-        return False
+        return bool(clients and oauth_client and oauth_client in clients)

@@ -161,8 +161,12 @@ def rel_listings(names, thing2_cls = Link):
     @dataspec_m_rel()
     def process(rel):
         if rel.name in names:
-            yield ('%s-%s' % (names[rel.name], rel.thing1_id), rel.timestamp,
-                   make_fullname(thing2_cls, rel.thing2_id))
+            yield (
+                f'{names[rel.name]}-{rel.thing1_id}',
+                rel.timestamp,
+                make_fullname(thing2_cls, rel.thing2_id),
+            )
+
     mr_tools.mr_map(process)
 
 def linkvote_listings():
@@ -268,9 +272,7 @@ def write_permacache_from_dir(dirname):
     # whole list at once
     allfiles = []
     for root, dirs, files in os.walk(dirname):
-        for f in files:
-            allfiles.append(os.path.join(root, f))
-
+        allfiles.extend(os.path.join(root, f) for f in files)
     for fname in progress(allfiles, persec=True):
         try:
             write_permacache_from_file(fname)
@@ -287,7 +289,7 @@ def write_permacache_from_dir(dirname):
                 os.rmdir(dname)
             except OSError as e:
                 if e.errno == errno.ENOTEMPTY:
-                    mr_tools.status('%s not empty' % (dname,))
+                    mr_tools.status(f'{dname} not empty')
                 else:
                     raise
 

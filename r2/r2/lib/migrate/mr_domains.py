@@ -63,8 +63,7 @@ def join_links():
 
 
 def time_listings(times = ('all',)):
-    oldests = dict((t, epoch_seconds(timeago('1 %s' % t)))
-                   for t in times if t != "all")
+    oldests = {t: epoch_seconds(timeago(f'1 {t}')) for t in times if t != "all"}
     oldests['all'] = epoch_seconds(timeago('10 years'))
 
     @mr_tools.dataspec_m_thing(("url", str),)
@@ -75,10 +74,7 @@ def time_listings(times = ('all',)):
         fname = make_fullname(Link, link.thing_id)
 
         if not link.spam and not link.deleted:
-            if link.url:
-                domains = UrlParser(link.url).domain_permutations()
-            else:
-                domains = []
+            domains = UrlParser(link.url).domain_permutations() if link.url else []
             ups, downs = link.ups, link.downs
 
             for tkey, oldest in oldests.iteritems():
@@ -87,15 +83,11 @@ def time_listings(times = ('all',)):
                     contr = controversy(ups, downs)
                     h = _hot(ups, downs, timestamp)
                     for domain in domains:
-                        yield ('domain/top/%s/%s' % (tkey, domain),
-                               sc, timestamp, fname)
-                        yield ('domain/controversial/%s/%s' % (tkey, domain),
-                               contr, timestamp, fname)
+                        yield (f'domain/top/{tkey}/{domain}', sc, timestamp, fname)
+                        yield (f'domain/controversial/{tkey}/{domain}', contr, timestamp, fname)
                         if tkey == "all":
-                            yield ('domain/hot/%s/%s' % (tkey, domain),
-                                   h, timestamp, fname)
-                            yield ('domain/new/%s/%s' % (tkey, domain),
-                                   timestamp, timestamp, fname)
+                            yield (f'domain/hot/{tkey}/{domain}', h, timestamp, fname)
+                            yield (f'domain/new/{tkey}/{domain}', timestamp, timestamp, fname)
 
     mr_tools.mr_map(process)
 

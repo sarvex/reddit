@@ -42,8 +42,7 @@ class SimpleTarget(object):
         self.impressions = impressions
 
     def __repr__(self):
-        return "<%s %s: %s impressions>" % (self.__class__.__name__, self.name,
-                                            self.impressions)
+        return f"<{self.__class__.__name__} {self.name}: {self.impressions} impressions>"
 
 
 class System(object):
@@ -59,10 +58,10 @@ class System(object):
 
     def __repr__(self):
         max_names = ', '.join(self.priority_target_names)
-        all_names = ', '.join("%s (%s)" % (target.name, target.impressions)
-                              for target in self.targets)
-        return "<%s: max %s in %s>" % (self.__class__.__name__, max_names,
-                                       all_names)
+        all_names = ', '.join(
+            f"{target.name} ({target.impressions})" for target in self.targets
+        )
+        return f"<{self.__class__.__name__}: max {max_names} in {all_names}>"
 
     def combine_campaigns(self, campaigns):
         """Combine campaigns with the same target."""
@@ -159,10 +158,11 @@ class System(object):
             # so we can just delete it
             del targets_by_name[target_name]
 
-        reduced_campaigns = []
-        for campaign in campaigns_by_name.itervalues():
-            if campaign.impressions > 0:
-                reduced_campaigns.append(campaign)
+        reduced_campaigns = [
+            campaign
+            for campaign in campaigns_by_name.itervalues()
+            if campaign.impressions > 0
+        ]
         reduced_targets = targets_by_name.values()
         return changed, reduced_campaigns, reduced_targets
 

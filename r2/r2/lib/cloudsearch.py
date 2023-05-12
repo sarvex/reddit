@@ -74,10 +74,7 @@ def safe_get(get_fn, ids, return_dict=True, **kw):
             g.log.info("%s failed for %r", get_fn.__name__, i)
         else:
             items[i] = item
-    if return_dict:
-        return items
-    else:
-        return items.values()
+    return items if return_dict else items.values()
 
 
 class CloudSearchHTTPError(httplib.HTTPException): pass
@@ -111,20 +108,14 @@ def field(name=None, cloudsearch_type=str, lucene_type=SAME_AS_CLOUDSEARCH):
                          lucene_type, fn)
         return fn
 
-    if function:
-        return field_inner(function)
-    else:
-        return field_inner
+    return field_inner(function) if function else field_inner
 
 
 class FieldsMeta(type):
-    def __init__(cls, name, bases, attrs):
-        type.__init__(cls, name, bases, attrs)
-        fields = []
-        for attr in attrs.itervalues():
-            if hasattr(attr, "field"):
-                fields.append(attr.field)
-        cls._fields = tuple(fields)
+    def __init__(self, name, bases, attrs):
+        type.__init__(self, name, bases, attrs)
+        fields = [attr.field for attr in attrs.itervalues() if hasattr(attr, "field")]
+        self._fields = tuple(fields)
 
 
 class FieldsBase(object):
@@ -240,26 +231,19 @@ class LinkFields(FieldsBase):
     def site(self):
         if self.link.is_self:
             return g.domain
-        else:
-            try:
-                url = r2utils.UrlParser(self.link.url)
-                return list(url.domain_permutations())
-            except ValueError:
-                return None
+        try:
+            url = r2utils.UrlParser(self.link.url)
+            return list(url.domain_permutations())
+        except ValueError:
+            return None
 
     @field
     def selftext(self):
-        if self.link.is_self and self.link.selftext:
-            return self.link.selftext
-        else:
-            return None
+        return self.link.selftext if self.link.is_self and self.link.selftext else None
 
     @field
     def url(self):
-        if not self.link.is_self:
-            return self.link.url
-        else:
-            return None
+        return self.link.url if not self.link.is_self else None
 
     @field
     def flair_css_class(self):
@@ -377,8 +361,7 @@ class CloudSearchUploader(object):
         
         '''
         version = str(version or self._version())
-        delete = etree.Element("delete", id=thing._fullname, version=version)
-        return delete
+        return etree.Element("delete", id=thing._fullname, version=version)
 
     def delete_ids(self, ids):
         '''Delete documents from the index.
@@ -488,8 +471,7 @@ class CloudSearchUploader(object):
         chunker = chunk_xml(docs)
         try:
             for data in chunker:
-                headers = {}
-                headers['Content-Type'] = 'application/xml'
+                headers = {'Content-Type': 'application/xml'}
                 # HTTPLib calculates Content-Length header automatically
                 connection.request('POST', "/2011-02-01/documents/batch",
                                    data, headers)
@@ -627,7 +609,7 @@ def run_changed(drain=False, min_size=500, limit=1000, sleep_time=10,
 
 
 def _progress_key(item):
-    return "%s/%s" % (item._id, item._date)
+    return f"{item._id}/{item._date}"
 
 
 _REBUILD_INDEX_CACHE_KEY = "cloudsearch_cursor_%s"
@@ -811,14 +793,13 @@ def _encode_query(query, bq, faceting, size, start, rank, return_fields):
     if faceting:
         params["facet"] = ",".join(faceting.iterkeys())
         for facet, options in faceting.iteritems():
-            params["facet-%s-top-n" % facet] = options.get("count", 20)
+            params[f"facet-{facet}-top-n"] = options.get("count", 20)
             if "sort" in options:
-                params["facet-%s-sort" % facet] = options["sort"]
+                params[f"facet-{facet}-sort"] = options["sort"]
     if return_fields:
         params["return-fields"] = ",".join(return_fields)
     encoded_query = urllib.urlencode(params)
-    path = _SEARCH + encoded_query
-    return path
+    return _SEARCH + encoded_query
 
 
 class CloudSearchQuery(object):
@@ -836,16 +817,13 @@ class CloudSearchQuery(object):
         if syntax is None:
             syntax = self.default_syntax
         elif syntax not in self.known_syntaxes:
-            raise ValueError("Unknown search syntax: %s" % syntax)
+            raise ValueError(f"Unknown search syntax: {syntax}")
         self.query = filters._force_unicode(query or u'')
         self.converted_data = None
         self.syntax = syntax
         self.sr = sr
         self._sort = sort
-        if raw_sort:
-            self.sort = raw_sort
-        else:
-            self.sort = self.sorts[sort]
+        self.sort = raw_sort if raw_sort else self.sorts[sort]
         self._recent = recent
         self.recent = self.recents[recent]
         self.faceting = faceting
@@ -888,11 +866,8 @@ class CloudSearchQuery(object):
         result = ["<", self.__class__.__name__, "> query:",
                   repr(self.query), " "]
         if self.bq:
-            result.append(" bq:")
-            result.append(repr(self.bq))
-            result.append(" ")
-        result.append("sort:")
-        result.append(self.sort)
+            result.extend((" bq:", repr(self.bq), " "))
+        result.extend(("sort:", self.sort))
         return ''.join(result)
 
     @classmethod
@@ -949,8 +924,7 @@ class CloudSearchQuery(object):
             values = facets[facet]['constraints']
             facets[facet] = values
 
-        results = Results(docs, hits, facets)
-        return results
+        return Results(docs, hits, facets)
 
 
 class LinkSearchQuery(CloudSearchQuery):
@@ -986,8 +960,7 @@ class LinkSearchQuery(CloudSearchQuery):
 
     def customize_query(self, bq):
         queries = [bq]
-        subreddit_query = self._get_sr_restriction(self.sr)
-        if subreddit_query:
+        if subreddit_query := self._get_sr_restriction(self.sr):
             queries.append(subreddit_query)
         if self.recent:
             recent_query = self._restrict_recent(self.recent)
@@ -997,11 +970,7 @@ class LinkSearchQuery(CloudSearchQuery):
     @classmethod
     def create_boolean_query(cls, queries):
         '''Return an AND clause combining all queries'''
-        if len(queries) > 1:
-            bq = '(and ' + ' '.join(queries) + ')'
-        else:
-            bq = queries[0]
-        return bq
+        return '(and ' + ' '.join(queries) + ')' if len(queries) > 1 else queries[0]
 
     @staticmethod
     def _restrict_recent(recent):
@@ -1020,30 +989,27 @@ class LinkSearchQuery(CloudSearchQuery):
             return None
         elif isinstance(sr, MultiReddit):
             bq = ["(or"]
-            for sr_id in sr.sr_ids:
-                bq.append("sr_id:%s" % sr_id)
+            bq.extend(f"sr_id:{sr_id}" for sr_id in sr.sr_ids)
             bq.append(")")
         elif isinstance(sr, DomainSR):
-            bq = ["site:'%s'" % sr.domain]
+            bq = [f"site:'{sr.domain}'"]
         elif sr == Friends:
             if not c.user_is_loggedin or not c.user.friends:
                 return None
-            bq = ["(or"]
             # The query limit is roughly 8k bytes. Limit to 200 friends to
             # avoid getting too close to that limit
             friend_ids = c.user.friends[:200]
-            friends = ["author_fullname:'%s'" %
-                       Account._fullname_from_id36(r2utils.to36(id_))
-                       for id_ in friend_ids]
-            bq.extend(friends)
-            bq.append(")")
+            friends = [
+                f"author_fullname:'{Account._fullname_from_id36(r2utils.to36(id_))}'"
+                for id_ in friend_ids
+            ]
+            bq = ["(or", *friends, ")"]
         elif isinstance(sr, ModContribSR):
             bq = ["(or"]
-            for sr_id in sr.sr_ids:
-                bq.append("sr_id:%s" % sr_id)
+            bq.extend(f"sr_id:{sr_id}" for sr_id in sr.sr_ids)
             bq.append(")")
         elif not isinstance(sr, FakeSubreddit):
-            bq = ["sr_id:%s" % sr._id]
+            bq = [f"sr_id:{sr._id}"]
 
         return ' '.join(bq)
 

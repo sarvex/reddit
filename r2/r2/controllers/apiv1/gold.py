@@ -67,7 +67,7 @@ class APIv1GoldController(OAuth2ResourceController):
             note = None
             buyer = c.user
             if c.user.name.lower() in g.live_config["proxy_gilding_accounts"]:
-                note = "proxy-%s" % c.user.name
+                note = f"proxy-{c.user.name}"
                 if proxying_for:
                     try:
                         buyer = Account._by_name(proxying_for)

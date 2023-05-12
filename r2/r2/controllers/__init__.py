@@ -24,7 +24,7 @@ _reddit_controllers = {}
 _plugin_controllers = {}
 
 def get_controller(name):
-    name = name.lower() + 'controller'
+    name = f'{name.lower()}controller'
     if name in _reddit_controllers:
         return _reddit_controllers[name]
     elif name in _plugin_controllers:

@@ -141,10 +141,7 @@ class JQueryResponse(JsonResponse):
     wire.
     """
     def __init__(self, top_node = None):
-        if top_node:
-            self.top_node = top_node
-        else:
-            self.top_node = self
+        self.top_node = top_node if top_node else self
         JsonResponse.__init__(self)
         self._clear()
 
@@ -158,9 +155,8 @@ class JQueryResponse(JsonResponse):
         JsonResponse._clear(self)
 
     def process_rendered(self, res):
-        if 'data' in res:
-            if 'content' in res['data']:
-                res['data']['content'] = spaceCompress(res['data']['content'])
+        if 'data' in res and 'content' in res['data']:
+            res['data']['content'] = spaceCompress(res['data']['content'])
         return res
 
     def send_failure(self, error):
@@ -194,9 +190,9 @@ class JQueryResponse(JsonResponse):
     def make_response(self):
         #add the error messages
         for (form, error_name, field_name) in self._errors:
-            selector = ".error." + error_name
+            selector = f".error.{error_name}"
             if field_name:
-                selector += ".field-" + field_name
+                selector += f".field-{field_name}"
             message = c.errors[(error_name, field_name)].message
             form.find(selector).show().text(message).end()
         return {"jquery": self.ops}
@@ -228,7 +224,7 @@ class JQueryResponse(JsonResponse):
             self._new_captcha = True
         
     def get_input(self, name):
-        return self.find("*[name=%s]" % name)
+        return self.find(f"*[name={name}]")
 
     def set_inputs(self, **kw):
         for k, v in kw.iteritems():

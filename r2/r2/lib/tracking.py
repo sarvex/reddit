@@ -60,10 +60,7 @@ def _unpad_message(text):
         return ""
 
     unpadded, padding = text[:-padding_size], text[-padding_size:]
-    if any(ord(x) != padding_size for x in padding):
-        return ""
-
-    return unpadded
+    return "" if any(ord(x) != padding_size for x in padding) else unpadded
 
 
 def _make_cipher(initialization_vector, secret):
@@ -144,9 +141,7 @@ def get_srpath():
     else:
         action = request.environ['pylons.routes_dict'].get('action')
 
-    if not action:
-        return name
-    return '-'.join((name, action))
+    return name if not action else '-'.join((name, action))
 
 
 def get_pageview_pixel_url():
@@ -158,14 +153,16 @@ def get_pageview_pixel_url():
         c.cname,
     ]
     encrypted = encrypt("|".join(_force_utf8(s) for s in data))
-    return g.tracker_url + "?v=" + encrypted
+    return f"{g.tracker_url}?v={encrypted}"
 
 
 def get_impression_pixel_url(codename):
     """Return a URL to use for tracking impressions of the given advert."""
     # TODO: use HMAC here
     mac = codename + hashlib.sha1(codename + g.tracking_secret).hexdigest()
-    return g.adframetracker_url + "?" + urllib.urlencode({
-        "hash": mac,
-        "id": codename,
-    })
+    return f"{g.adframetracker_url}?" + urllib.urlencode(
+        {
+            "hash": mac,
+            "id": codename,
+        }
+    )

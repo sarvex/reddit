@@ -72,7 +72,7 @@ class TimingStatBuffer:
             total_time, count = v.real, v.imag
             divisor = count or 1
             mean = total_time / divisor
-            yield k, str(mean * 1000) + '|ms'
+            yield (k, f'{str(mean * 1000)}|ms')
 
     def start_logging(self):
         self.log.timings = []
@@ -96,7 +96,7 @@ class CountingStatBuffer:
         """Yields accumulated counter data and resets the buffer."""
         data, self.data = self.data, collections.defaultdict(int)
         for k, v in data.iteritems():
-            yield k, str(v) + '|c'
+            yield (k, f'{str(v)}|c')
 
 
 class StringCountBuffer:
@@ -124,7 +124,7 @@ class StringCountBuffer:
         data, self.data = self.data, new_data
         for k, counts in data.iteritems():
             for v, count in counts.iteritems():
-                yield k, str(count) + '|s|' + self._encode_string(v)
+                yield (k, f'{str(count)}|s|{self._encode_string(v)}')
 
 
 class StatsdConnection:
@@ -309,13 +309,15 @@ class Stats:
         return Counter(self.client, name)
 
     def action_count(self, counter_name, name, delta=1):
-        counter = self.get_counter(counter_name)
-        if counter:
+        if counter := self.get_counter(counter_name):
             from pylons import request
-            counter.increment('%s.%s' % (request.environ["pylons.routes_dict"]["action"], name), delta=delta)
+            counter.increment(
+                f'{request.environ["pylons.routes_dict"]["action"]}.{name}',
+                delta=delta,
+            )
 
     def action_event_count(self, event_name, state=None, delta=1, true_name="success", false_name="fail"):
-        counter_name = 'event.%s' % event_name
+        counter_name = f'event.{event_name}'
         if state == True:
             self.action_count(counter_name, true_name, delta=delta)
         elif state == False:
@@ -324,8 +326,7 @@ class Stats:
 
     def simple_event(self, event_name, delta=1):
         parts = event_name.split('.')
-        counter = self.get_counter('.'.join(['event'] + parts[:-1]))
-        if counter:
+        if counter := self.get_counter('.'.join(['event'] + parts[:-1])):
             counter.increment(parts[-1], delta=delta)
 
     def simple_timing(self, event_name, ms):
@@ -334,7 +335,7 @@ class Stats:
     def event_count(self, event_name, name, sample_rate=None):
         if sample_rate is None:
             sample_rate = 1.0
-        counter = self.get_counter('event.%s' % event_name)
+        counter = self.get_counter(f'event.{event_name}')
         if counter and random.random() < sample_rate:
             counter.increment(name)
             counter.increment('total')
@@ -362,10 +363,11 @@ class Stats:
                     for n, msg in enumerate(msg_tup):
                         fake_start = start + n * service_time
                         fake_end = fake_start + service_time
-                        self.transact('amqp.%s' % queue_name,
-                                      fake_start, fake_end)
+                        self.transact(f'amqp.{queue_name}', fake_start, fake_end)
                     self.flush()
+
             return wrap_processor
+
         return decorator
 
     def flush(self):
@@ -414,9 +416,9 @@ class CacheStats:
     def __init__(self, parent, cache_name):
         self.parent = parent
         self.cache_name = cache_name
-        self.hit_stat_name = '%s.hit' % self.cache_name
-        self.miss_stat_name = '%s.miss' % self.cache_name
-        self.total_stat_name = '%s.total' % self.cache_name
+        self.hit_stat_name = f'{self.cache_name}.hit'
+        self.miss_stat_name = f'{self.cache_name}.miss'
+        self.total_stat_name = f'{self.cache_name}.total'
 
     def cache_hit(self, delta=1):
         if delta:
@@ -438,9 +440,9 @@ class CacheStats:
         if hits or misses:
             if not cache_name:
                 cache_name = self.cache_name
-            hit_stat_name = '%s.hit' % cache_name
-            miss_stat_name = '%s.miss' % cache_name
-            total_stat_name = '%s.total' % cache_name
+            hit_stat_name = f'{cache_name}.hit'
+            miss_stat_name = f'{cache_name}.miss'
+            total_stat_name = f'{cache_name}.total'
             data = {
                 hit_stat_name: hits,
                 miss_stat_name: misses,
@@ -452,9 +454,9 @@ class CacheStats:
 class StaleCacheStats(CacheStats):
     def __init__(self, parent, cache_name):
         CacheStats.__init__(self, parent, cache_name)
-        self.stale_hit_name = '%s.stale.hit' % self.cache_name
-        self.stale_miss_name = '%s.stale.miss' % self.cache_name
-        self.stale_total_name = '%s.stale.total' % self.cache_name
+        self.stale_hit_name = f'{self.cache_name}.stale.hit'
+        self.stale_miss_name = f'{self.cache_name}.stale.miss'
+        self.stale_total_name = f'{self.cache_name}.stale.total'
 
     def stale_hit(self, delta=1):
         if delta:

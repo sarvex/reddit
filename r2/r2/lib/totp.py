@@ -61,8 +61,7 @@ def generate_secret():
     """Make a secret key suitable for use in TOTP."""
     from Crypto.Random import get_random_bytes
     bytes = get_random_bytes(20)
-    encoded = base64.b32encode(bytes)
-    return encoded
+    return base64.b32encode(bytes)
 
 
 if __name__ == "__main__":

@@ -71,11 +71,7 @@ class EmbedController(RedditController):
 
     @csrf_exempt
     def renderurl(self, override=None):
-        if override:
-            path = override
-        else:
-            path = request.path
-
+        path = override if override else request.path
         fp, content = renderurl_cached(path)
         if content is None:
             self.abort404()
@@ -92,4 +88,4 @@ class EmbedController(RedditController):
         if c.default_sr:
             return self.redirect('/help/faq')
         else:
-            return self.renderurl('/help/faqs/' + c.site.name)
+            return self.renderurl(f'/help/faqs/{c.site.name}')

@@ -44,17 +44,18 @@ class HardCacheBackend(object):
         TZ = gc.display_tz
 
         def _table(metadata):
-            return sa.Table(gc.db_app_name + '_hardcache', metadata,
-                            sa.Column('category', sa.String, nullable = False,
-                                      primary_key = True),
-                            sa.Column('ids', sa.String, nullable = False,
-                                      primary_key = True),
-                            sa.Column('value', sa.String, nullable = False),
-                            sa.Column('kind', sa.String, nullable = False),
-                            sa.Column('expiration',
-                                      sa.DateTime(timezone = True),
-                                      nullable = False)
-                            )
+            return sa.Table(
+                f'{gc.db_app_name}_hardcache',
+                metadata,
+                sa.Column('category', sa.String, nullable=False, primary_key=True),
+                sa.Column('ids', sa.String, nullable=False, primary_key=True),
+                sa.Column('value', sa.String, nullable=False),
+                sa.Column('kind', sa.String, nullable=False),
+                sa.Column(
+                    'expiration', sa.DateTime(timezone=True), nullable=False
+                ),
+            )
+
         enginenames_by_category = {}
         all_enginenames = set()
         for item in gc.hardcache_categories:
@@ -67,12 +68,12 @@ class HardCacheBackend(object):
                 if c == '!profile':
                     self.profile_categories[category] = True
                 elif c.startswith("!"):
-                    raise ValueError("WTF is [%s] in hardcache_overrides?" % c)
+                    raise ValueError(f"WTF is [{c}] in hardcache_overrides?")
                 else:
                     all_enginenames.add(c)
                     enginenames_by_category[category].append(c)
 
-        assert('*' in enginenames_by_category.keys())
+        assert '*' in enginenames_by_category
 
         engines_by_enginename = {}
         for enginename in all_enginenames:
@@ -97,7 +98,7 @@ class HardCacheBackend(object):
         elif type == 'readslave':
             return random.choice(engines[1:])
         else:
-            raise ValueError("invalid type %s" % type)
+            raise ValueError(f"invalid type {type}")
 
     def profile_start(self, operation, category):
         if category == COUNT_CATEGORY:
@@ -106,11 +107,7 @@ class HardCacheBackend(object):
         if category == ELAPSED_CATEGORY:
             return None
 
-        if category in self.mapping:
-            effective_category = category
-        else:
-            effective_category = '*'
-
+        effective_category = category if category in self.mapping else '*'
         if effective_category not in self.profile_categories:
             return None
 
@@ -214,8 +211,7 @@ class HardCacheBackend(object):
         elif rp.rowcount == 0:
             existing_value = self.get(category, ids, force_write_table=True)
             if existing_value is None:
-                raise ValueError("[%s][%s] can't be incr()ed -- it's not set" %
-                                 (category, ids))
+                raise ValueError(f"[{category}][{ids}] can't be incr()ed -- it's not set")
             else:
                 raise ValueError("[%s][%s] has non-integer value %r" %
                                  (category, ids, existing_value))
@@ -223,11 +219,7 @@ class HardCacheBackend(object):
             raise ValueError("Somehow %d rows got updated" % rp.rowcount)
 
     def get(self, category, ids, force_write_table=False):
-        if force_write_table:
-            type = "master"
-        else:
-            type = "readslave"
-
+        type = "master" if force_write_table else "readslave"
         engine = self.engine_by_category(category, type)
 
         prof = self.profile_start('get', category)
@@ -268,9 +260,9 @@ class HardCacheBackend(object):
         results = {}
 
         for row in rows:
-          if row.expiration >= datetime.now(TZ):
-              k = "%s-%s" % (category, row.ids)
-              results[k] = self.tdb.db2py(row.value, row.kind)
+            if row.expiration >= datetime.now(TZ):
+                k = f"{category}-{row.ids}"
+                results[k] = self.tdb.db2py(row.value, row.kind)
 
         return results
 
@@ -325,11 +317,7 @@ class HardCacheBackend(object):
 def delete_expired(expiration="now", limit=5000):
     hcb = HardCacheBackend(g)
 
-    masters = set()
-
-    for engines in hcb.mapping.values():
-        masters.add(engines[0])
-
+    masters = {engines[0] for engines in hcb.mapping.values()}
     for engine in masters:
         expiration_clause = hcb.clause_from_expiration(engine, expiration)
 
@@ -340,7 +328,7 @@ def delete_expired(expiration="now", limit=5000):
             continue
 
         # Delete them from memcache
-        mc_keys = [ "%s-%s" % (c, i) for e, c, i in rows ]
+        mc_keys = [f"{c}-{i}" for e, c, i in rows]
         g.cache.delete_multi(mc_keys)
 
         # Now delete them from the backend.

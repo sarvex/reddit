@@ -270,12 +270,11 @@ class OAuth2AccessController(MinimalController):
             return self.api_wrapper(resp)
 
     def _check_for_errors(self):
-        resp = {}
-        if (errors.INVALID_OPTION, "scope") in c.errors:
-            resp["error"] = "invalid_scope"
-        else:
-            resp["error"] = "invalid_request"
-        return resp
+        return {
+            "error": "invalid_scope"
+            if (errors.INVALID_OPTION, "scope") in c.errors
+            else "invalid_request"
+        }
 
     @classmethod
     def _make_token_dict(cls, access_token, refresh_token=None):
@@ -304,9 +303,9 @@ class OAuth2AccessController(MinimalController):
         access_token = None
         refresh_token = None
 
-        auth_token = OAuth2AuthorizationCode.use_token(
-            code, c.oauth2_client._id, redirect_uri)
-        if auth_token:
+        if auth_token := OAuth2AuthorizationCode.use_token(
+            code, c.oauth2_client._id, redirect_uri
+        ):
             if auth_token.refreshable:
                 refresh_token = OAuth2RefreshToken._new(
                     auth_token.client_id, auth_token.user_id,

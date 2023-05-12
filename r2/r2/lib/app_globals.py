@@ -854,7 +854,7 @@ class Globals(object):
         db_param_names = ('name', 'db_host', 'db_user', 'db_pass', 'db_port',
                           'pool_size', 'max_overflow')
         for db_name in self.databases:
-            conf_params = ConfigValue.to_iter(self.config.raw_data[db_name + '_db'])
+            conf_params = ConfigValue.to_iter(self.config.raw_data[f'{db_name}_db'])
             params = dict(zip(db_param_names, conf_params))
             if params['db_user'] == "*":
                 params['db_user'] = self.db_user
@@ -883,11 +883,7 @@ class Globals(object):
                     params.append(param)
                 else:
                     key, sep, value = param[1:].partition("=")
-                    if sep:
-                        flags[key] = value
-                    else:
-                        flags[key] = True
-
+                    flags[key] = value if sep else True
             return params, flags
 
         prefix = 'db_table_'
@@ -899,7 +895,7 @@ class Globals(object):
             params, table_flags = split_flags(ConfigValue.to_iter(v))
             name = k[len(prefix):]
             kind = params[0]
-            server_list = self.config.raw_data["db_servers_" + name]
+            server_list = self.config.raw_data[f"db_servers_{name}"]
             engines, flags = split_flags(ConfigValue.to_iter(server_list))
 
             typeid = table_flags.get("typeid")

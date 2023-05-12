@@ -68,9 +68,9 @@ class HealthController(MinimalController):
                     # libmemcached doesn't support UDP get/fetch operations
                     continue
                 mc = pylibmc.Client([server], behaviors=behaviors)
-                mc.get("__health_check_%s__" % server)
+                mc.get(f"__health_check_{server}__")
                 results[server] = "OK"
             except pylibmc.Error as e:
                 g.log.warning("Health check for %s FAILED: %s", server, e)
-                results[server] = "FAILED %s" % e
+                results[server] = f"FAILED {e}"
         return json.dumps(results)

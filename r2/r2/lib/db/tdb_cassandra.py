@@ -120,44 +120,50 @@ def get_manager(seeds):
     return SystemManager(server)
 
 class ThingMeta(type):
-    def __init__(cls, name, bases, dct):
-        type.__init__(cls, name, bases, dct)
+    def __init__(self, name, bases, dct):
+        type.__init__(self, name, bases, dct)
 
-        if hasattr(cls, '_ttl') and hasattr(cls._ttl, 'total_seconds'):
-            cls._ttl = cls._ttl.total_seconds()
+        if hasattr(self, '_ttl') and hasattr(self._ttl, 'total_seconds'):
+            self._ttl = self._ttl.total_seconds()
 
-        if cls._use_db:
-            if cls._type_prefix is None:
+        if self._use_db:
+            if self._type_prefix is None:
                 # default to the class name
-                cls._type_prefix = name
+                self._type_prefix = name
 
-            if '_' in cls._type_prefix:
-                raise TdbException("Cannot have _ in type prefix %r (for %r)"
-                                   % (cls._type_prefix, name))
+            if '_' in self._type_prefix:
+                raise TdbException(
+                    (
+                        "Cannot have _ in type prefix %r (for %r)"
+                        % (self._type_prefix, name)
+                    )
+                )
 
-            if cls._type_prefix in thing_types:
-                raise InvariantException("Redefining type %r?" % (cls._type_prefix))
+            if self._type_prefix in thing_types:
+                raise InvariantException("Redefining type %r?" % self._type_prefix)
 
             # if we weren't given a specific _cf_name, we can use the
             # classes's name
-            cf_name = cls._cf_name or name
+            cf_name = self._cf_name or name
 
-            thing_types[cls._type_prefix] = cls
+            thing_types[self._type_prefix] = self
 
-            if not getattr(cls, "_read_consistency_level", None):
-                cls._read_consistency_level = read_consistency_level
-            if not getattr(cls, "_write_consistency_level", None):
-                cls._write_consistency_level = write_consistency_level
+            if not getattr(self, "_read_consistency_level", None):
+                self._read_consistency_level = read_consistency_level
+            if not getattr(self, "_write_consistency_level", None):
+                self._write_consistency_level = write_consistency_level
 
-            pool_name = getattr(cls, "_connection_pool", default_connection_pool)
+            pool_name = getattr(self, "_connection_pool", default_connection_pool)
             connection_pool = connection_pools[pool_name]
             cassandra_seeds = connection_pool.server_list
 
             try:
-                cls._cf = ColumnFamily(connection_pool,
-                                       cf_name,
-                                       read_consistency_level = cls._read_consistency_level,
-                                       write_consistency_level = cls._write_consistency_level)
+                self._cf = ColumnFamily(
+                    connection_pool,
+                    cf_name,
+                    read_consistency_level=self._read_consistency_level,
+                    write_consistency_level=self._write_consistency_level,
+                )
             except NotFoundException:
                 if not db_create_tables:
                     raise
@@ -166,29 +172,33 @@ class ThingMeta(type):
 
                 # allow subclasses to add creation args or override base class ones
                 extra_creation_arguments = {}
-                for c in reversed(inspect.getmro(cls)):
+                for c in reversed(inspect.getmro(self)):
                     creation_args = getattr(c, "_extra_schema_creation_args", {})
-                    extra_creation_arguments.update(creation_args)
+                    extra_creation_arguments |= creation_args
 
-                log.warning("Creating Cassandra Column Family %s" % (cf_name,))
+                log.warning(f"Creating Cassandra Column Family {cf_name}")
                 with make_lock("cassandra_schema", 'cassandra_schema'):
-                    manager.create_column_family(keyspace, cf_name,
-                                                 comparator_type = cls._compare_with,
-                                                 super=getattr(cls, '_super', False),
-                                                 **extra_creation_arguments
-                                                 )
-                log.warning("Created Cassandra Column Family %s" % (cf_name,))
+                    manager.create_column_family(
+                        keyspace,
+                        cf_name,
+                        comparator_type=self._compare_with,
+                        super=getattr(self, '_super', False),
+                        **extra_creation_arguments
+                    )
+                log.warning(f"Created Cassandra Column Family {cf_name}")
 
                 # try again to look it up
-                cls._cf = ColumnFamily(connection_pool,
-                                       cf_name,
-                                       read_consistency_level = cls._read_consistency_level,
-                                       write_consistency_level = cls._write_consistency_level)
+                self._cf = ColumnFamily(
+                    connection_pool,
+                    cf_name,
+                    read_consistency_level=self._read_consistency_level,
+                    write_consistency_level=self._write_consistency_level,
+                )
 
-        cls._kind = name
+        self._kind = name
 
-    def __repr__(cls):
-        return '<thing: %s>' % cls.__name__
+    def __repr__(self):
+        return f'<thing: {self.__name__}>'
 
 class Counter(object):
     __metaclass__ = ThingMeta
@@ -415,7 +425,7 @@ class ThingBase(object):
             raise TdbException("%r has no _type_prefix, so fullnames cannot be generated"
                                % self.__class__)
 
-        return '%s_%s' % (self._type_prefix, self._id)
+        return f'{self._type_prefix}_{self._id}'
 
     @classmethod
     def _by_fullname(cls, fnames, return_dict=True, ignore_missing=False):
@@ -440,14 +450,14 @@ class ThingBase(object):
             except IndexError:
                 raise NotFound("<%s %r>" % (cls.__name__, ids[0]))
         elif return_dict:
-            return dict((x._fullname, x) for x in items)
+            return {x._fullname: x for x in items}
         else:
-            d = dict((x._fullname, x) for x in items)
+            d = {x._fullname: x for x in items}
             return [d[fullname] for fullname in fnames]
 
     @classmethod
     def _cache_prefix(cls):
-        return 'tdbcassandra_' + cls._type_prefix + '_'
+        return f'tdbcassandra_{cls._type_prefix}_'
 
     def _cache_key(self):
         if not self._id:
@@ -467,12 +477,12 @@ class ThingBase(object):
             return default
         return cls._write_consistency_level
 
-    def _rcl(cls, rcl, default = None):
+    def _rcl(self, rcl, default = None):
         if rcl is not None:
             return rcl
         elif default is not None:
             return default
-        return cls._read_consistency_level
+        return self._read_consistency_level
 
     @classmethod
     def _get_column_validator(cls, colname):
@@ -546,9 +556,10 @@ class ThingBase(object):
 
     @classmethod
     def _from_serialized_columns(cls, t_id, columns):
-        d_columns = dict((attr, cls._deserialize_column(attr, val))
-                         for (attr, val)
-                         in columns.iteritems())
+        d_columns = {
+            attr: cls._deserialize_column(attr, val)
+            for (attr, val) in columns.iteritems()
+        }
         return cls._from_columns(t_id, d_columns)
 
     @classmethod
@@ -590,11 +601,11 @@ class ThingBase(object):
         # serialize everything while filtering out anything that's
         # been dirtied but doesn't actually differ from what's already
         # in the DB
-        updates = dict((attr, self._serialize_column(attr, val))
-                       for (attr, val)
-                       in self._dirties.iteritems()
-                       if (attr not in self._orig or
-                           val != self._orig[attr]))
+        updates = {
+            attr: self._serialize_column(attr, val)
+            for (attr, val) in self._dirties.iteritems()
+            if (attr not in self._orig or val != self._orig[attr])
+        }
 
         # n.b. deleted columns are applied *after* the updates. our
         # __setattr__/__delitem__ tries to make sure that this always
@@ -829,7 +840,7 @@ class UuidThing(ThingBase):
         #Convert string ids to UUIDs before retrieving
         uuids = [UUID(id) if not isinstance(id, UUID) else id for id in ids]
 
-        if len(uuids) == 0:
+        if not uuids:
             return {}
         elif is_single:
             assert len(uuids) == 1
@@ -935,9 +946,9 @@ class DenormalizedRelation(object):
         # since the last time the thing1 created a relationship of this type
         if cls._last_modified_name:
             from r2.models.last_modified import LastModified
-            timestamp = LastModified.get(thing1._fullname,
-                                         cls._last_modified_name)
-            if timestamp:
+            if timestamp := LastModified.get(
+                thing1._fullname, cls._last_modified_name
+            ):
                 thing2s = [thing2 for thing2 in thing2s
                            if thing2._date <= timestamp]
             else:
@@ -961,12 +972,11 @@ class DenormalizedRelation(object):
             return {(thing1, thing2s_by_id[k]) : v
                     for k, v in results.iteritems()}
         else:
-            if results:
-                assert len(results) == 1
-                return results.values()[0]
-            else:
+            if not results:
                 raise NotFound("<%s %r>" % (cls.__name__, (thing1._id36,
                                                            thing2._id36)))
+            assert len(results) == 1
+            return results.values()[0]
 
 
 class ColumnQuery(object):
@@ -1020,10 +1030,7 @@ class ColumnQuery(object):
         objs, is_single = tup(objs, ret_is_single=True)
         columns = [{obj._id: obj._id} for obj in objs]
 
-        if is_single:
-            return columns[0]
-        else:
-            return columns
+        return columns[0] if is_single else columns
 
     def _after(self, thing):
         if thing:
@@ -1063,7 +1070,7 @@ class ColumnQuery(object):
                 else:
                     r_combined = {}
                     for d in r.values():
-                        r_combined.update(d)
+                        r_combined |= d
                     columns = OrderedDict(sorted(r_combined.items(),
                                                  key=lambda t: self.sort_key(t[0]),
                                                  reverse=self.column_reversed))
@@ -1097,8 +1104,7 @@ class ColumnQuery(object):
                 ret = objs
 
             ret, is_single = tup(ret, ret_is_single=True)
-            for r in ret:
-                yield r
+            yield from ret
 
     def __repr__(self):
         return "<%s(%s-%r)>" % (self.__class__.__name__, self.cls.__name__,
@@ -1246,8 +1252,7 @@ class Query(object):
                 # a ghost row
                 continue
 
-            t = self.cls._from_serialized_columns(t_id, columns)
-            yield t
+            yield self.cls._from_serialized_columns(t_id, columns)
 
 class View(ThingBase):
     # Views are Things like any other, but may have special key
@@ -1276,10 +1281,7 @@ class View(ThingBase):
 
         columns = [{obj._id: obj._id} for obj in objs]
 
-        if len(columns) == 1:
-            return columns[0]
-        else:
-            return columns
+        return columns[0] if len(columns) == 1 else columns
 
     @classmethod
     def _column_to_obj(cls, columns):
@@ -1335,8 +1337,10 @@ class View(ThingBase):
            looking up the whole row first"""
         # col_values =:= dict(col_name -> col_value)
 
-        updates = dict((col_name, cls._serialize_column(col_name, col_val))
-                       for (col_name, col_val) in col_values.iteritems())
+        updates = {
+            col_name: cls._serialize_column(col_name, col_val)
+            for (col_name, col_val) in col_values.iteritems()
+        }
 
         # if they didn't give us a TTL, use the default TTL for the
         # class. This will be further overwritten below per-column
@@ -1374,16 +1378,16 @@ class DenormalizedView(View):
     @classmethod
     def _thing_dumper(cls, thing):
         serialize_fn = cls._view_of._serialize_column
-        serialized_columns = dict((attr, serialize_fn(attr, val)) for
-            (attr, val) in thing._orig.iteritems())
+        serialized_columns = {
+            attr: serialize_fn(attr, val)(attr, val) in thing._orig.iteritems()
+        }
 
         # Encode date props which may be binary
         for attr, val in serialized_columns.items():
             if cls.is_date_prop(attr):
                 serialized_columns[attr] = base64.b64encode(val)
 
-        dump = json.dumps(serialized_columns)
-        return dump
+        return json.dumps(serialized_columns)
 
     @classmethod
     def _thing_loader(cls, _id, dump):
@@ -1394,8 +1398,7 @@ class DenormalizedView(View):
             if cls.is_date_prop(attr):
                 serialized_columns[attr] = base64.b64decode(val)
 
-        obj = cls._view_of._from_serialized_columns(_id, serialized_columns)
-        return obj
+        return cls._view_of._from_serialized_columns(_id, serialized_columns)
 
     @classmethod
     def _obj_to_column(cls, objs):
@@ -1406,10 +1409,7 @@ class DenormalizedView(View):
             dump = cls._thing_dumper(o)
             columns.append({_id: dump})
 
-        if len(columns) == 1:
-            return columns[0]
-        else:
-            return columns
+        return columns[0] if len(columns) == 1 else columns
 
     @classmethod
     def _column_to_obj(cls, columns):
@@ -1420,10 +1420,7 @@ class DenormalizedView(View):
             obj = cls._thing_loader(_id, dump)
             objs.append(obj)
 
-        if len(objs) == 1:
-            return objs[0]
-        else:
-            return objs
+        return objs[0] if len(objs) == 1 else objs
 
 def schema_report():
     manager = get_manager()

@@ -31,17 +31,17 @@ from r2.models.link import Comment, Link
 MESSAGE_TREE_SIZE_LIMIT = 15000
 
 def comments_key(link_id):
-    return 'comments_' + str(link_id)
+    return f'comments_{str(link_id)}'
 
 def lock_key(link_id):
-    return 'comment_lock_' + str(link_id)
+    return f'comment_lock_{str(link_id)}'
 
 def parent_comments_key(link_id):
-    return 'comments_parents_' + str(link_id)
+    return f'comments_parents_{str(link_id)}'
 
 def sort_comments_key(link_id, sort):
     assert sort.startswith('_')
-    return '%s%s' % (to36(link_id), sort)
+    return f'{to36(link_id)}{sort}'
 
 def _get_sort_value(comment, sort):
     if sort == "_date":
@@ -60,8 +60,7 @@ def add_comments(comments):
         link = links[link_id]
         add_comments = [comment for comment in coms if not comment._deleted]
         delete_comments = (comment for comment in coms if comment._deleted)
-        timer = g.stats.get_timer('comment_tree.add.%s'
-                                  % link.comment_tree_version)
+        timer = g.stats.get_timer(f'comment_tree.add.{link.comment_tree_version}')
         timer.start()
         try:
             with CommentTree.mutation_context(link):
@@ -97,8 +96,7 @@ def update_comment_votes(comments, write_consistency_level = None):
             # Cassandra always uses the id36 instead of the integer
             # ID, so we'll map that first before sending it
             c_key = sort_comments_key(link_id, sort)
-            c_r = dict((cm._id36, _get_sort_value(cm, sort))
-                       for cm in coms)
+            c_r = {cm._id36: _get_sort_value(cm, sort) for cm in coms}
             CommentSortsCache._set_values(c_key, c_r,
                                           write_consistency_level = write_consistency_level)
 
@@ -120,7 +118,7 @@ def _comment_sorter_from_cids(cids, sort):
     Returns a dictionary from cid to a numeric sort value.
     """
     comments = Comment._byID(cids, data = False, return_dict = False)
-    return dict((x._id, _get_sort_value(x, sort)) for x in comments)
+    return {x._id: _get_sort_value(x, sort) for x in comments}
 
 def _get_comment_sorter(link_id, sort):
     """Retrieve cached sort values for all comments on a post.
@@ -144,8 +142,7 @@ def _get_comment_sorter(link_id, sort):
 
     # we store these id36ed, but there are still bits of the code that
     # want to deal in integer IDs
-    sorter = dict((int(c_id, 36), val)
-                  for (c_id, val) in sorter.iteritems())
+    sorter = {int(c_id, 36): val for (c_id, val) in sorter.iteritems()}
     return sorter
 
 def link_comments_and_sort(link, sort):
@@ -184,7 +181,7 @@ def link_comments_and_sort(link, sort):
     #    (CommentSortsCache) rather than a permacache key. One of
     #    these exists for each sort (hot, new, etc)
 
-    timer = g.stats.get_timer('comment_tree.get.%s' % link.comment_tree_version)
+    timer = g.stats.get_timer(f'comment_tree.get.{link.comment_tree_version}')
     timer.start()
 
     link_id = link._id
@@ -201,8 +198,7 @@ def link_comments_and_sort(link, sort):
     sorter_needed = []
     if cids and not sorter:
         sorter_needed = cids
-        g.log.debug("comment_tree.py: sorter (%s) cache miss for Link %s"
-                    % (sort, link_id))
+        g.log.debug(f"comment_tree.py: sorter ({sort}) cache miss for Link {link_id}")
         sorter = {}
 
     sorter_needed = [x for x in cids if x not in sorter]
@@ -217,12 +213,10 @@ def link_comments_and_sort(link, sort):
         timer.intermediate('sort')
 
     if parents is None:
-        g.log.debug("comment_tree.py: parents cache miss for Link %s"
-                    % link_id)
+        g.log.debug(f"comment_tree.py: parents cache miss for Link {link_id}")
         parents = {}
-    elif cids and not all(x in parents for x in cids):
-        g.log.debug("Error in comment_tree: parents inconsistent for Link %s"
-                    % link_id)
+    elif cids and any(x not in parents for x in cids):
+        g.log.debug(f"Error in comment_tree: parents inconsistent for Link {link_id}")
         parents = {}
 
     if not parents and len(cids) > 0:
@@ -256,10 +250,10 @@ def get_comment_tree(link, _update=False, timer=None):
 
 # message conversation functions
 def messages_key(user_id):
-    return 'message_conversations_' + str(user_id)
+    return f'message_conversations_{str(user_id)}'
 
 def messages_lock_key(user_id):
-    return 'message_conversations_lock_' + str(user_id)
+    return f'message_conversations_lock_{str(user_id)}'
 
 def add_message(message, update_recipient=True, update_modmail=True,
                 add_to_user=None):
@@ -302,12 +296,10 @@ def _add_message_nolock(key, message):
             if message._id not in tree_dict[message.first_message]:
                 tree_dict[message.first_message].append(message._id)
                 tree_dict[message.first_message].sort()
-        # we have to regenerate the conversation :/
         else:
             m = Message._query(Message.c.first_message == message.first_message,
                                data = True)
-            new_tree = compute_message_trees(m)
-            if new_tree:
+            if new_tree := compute_message_trees(m):
                 trees.append(new_tree[0])
         trees.sort(key = tree_sort_fn, reverse = True)
 
@@ -339,8 +331,12 @@ def _conversation(trees, parent):
     # To the database!
     rules = [Message.c.first_message == parent._id]
     if c.user_is_admin:
-        rules.append(Message.c._spam == (True, False))
-        rules.append(Message.c._deleted == (True, False))
+        rules.extend(
+            (
+                Message.c._spam == (True, False),
+                Message.c._deleted == (True, False),
+            )
+        )
     m = Message._query(*rules, data=True)
     return compute_message_trees([parent] + list(m))
 
@@ -366,11 +362,9 @@ def _process_message_query(inbox):
 def _load_messages(mlist):
     from r2.models import Message
     m = {}
-    ids = [x for x in mlist if not isinstance(x, Message)]
-    if ids:
+    if ids := [x for x in mlist if not isinstance(x, Message)]:
         m = Message._by_fullname(ids, return_dict = True, data = True)
-    messages = [m.get(x, x) for x in mlist]
-    return messages
+    return [m.get(x, x) for x in mlist]
 
 def user_messages_nocache(user):
     """
@@ -383,10 +377,10 @@ def user_messages_nocache(user):
     return compute_message_trees(messages)
 
 def sr_messages_key(sr_id):
-    return 'sr_messages_conversation_' + str(sr_id)
+    return f'sr_messages_conversation_{str(sr_id)}'
 
 def sr_messages_lock_key(sr_id):
-    return 'sr_messages_conversation_lock_' + str(sr_id)
+    return f'sr_messages_conversation_lock_{str(sr_id)}'
 
 
 def subreddit_messages(sr, update = False):
@@ -452,11 +446,8 @@ def compute_message_trees(messages):
         else:
             roots.add(m._id)
 
-    # load any top-level messages which are not in the original list
-    missing = [m for m in roots if m not in mdict]
-    if missing:
-        mdict.update(Message._byID(tup(missing),
-                                   return_dict = True, data = True))
+    if missing := [m for m in roots if m not in mdict]:
+        mdict |= Message._byID(tup(missing), return_dict=True, data=True)
 
     # sort threads in chrono order
     for k in threads:

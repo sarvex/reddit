@@ -82,18 +82,12 @@ def health_check():
 
 def cost_per_mille(spend, impressions):
     """Return the cost-per-mille given ad spend and impressions."""
-    if impressions:
-        return 1000. * float(spend) / impressions
-    else:
-        return 0
+    return 1000. * float(spend) / impressions if impressions else 0
 
 
 def cost_per_click(spend, clicks):
     """Return the cost-per-click given ad spend and clicks."""
-    if clicks:
-        return float(spend) / clicks
-    else:
-        return 0
+    return float(spend) / clicks if clicks else 0
 
 
 def promo_keep_fn(item):
@@ -105,39 +99,35 @@ def promo_keep_fn(item):
 # attrs
 
 def _base_domain():
-    if g.domain_prefix:
-        return g.domain_prefix + '.' + g.domain
-    else:
-        return g.domain
+    return f'{g.domain_prefix}.{g.domain}' if g.domain_prefix else g.domain
 
 def promo_traffic_url(l): # old traffic url
-    return "http://%s/traffic/%s/" % (_base_domain(), l._id36)
+    return f"http://{_base_domain()}/traffic/{l._id36}/"
 
 def promotraffic_url(l): # new traffic url
-    return "http://%s/promoted/traffic/headline/%s" % (_base_domain(), l._id36)
+    return f"http://{_base_domain()}/promoted/traffic/headline/{l._id36}"
 
 def promo_edit_url(l):
-    return "http://%s/promoted/edit_promo/%s" % (_base_domain(), l._id36)
+    return f"http://{_base_domain()}/promoted/edit_promo/{l._id36}"
 
 def pay_url(l, campaign):
-    return "%spromoted/pay/%s/%s" % (g.payment_domain, l._id36, campaign._id36)
+    return f"{g.payment_domain}promoted/pay/{l._id36}/{campaign._id36}"
 
 def view_live_url(l, srname):
     domain = _base_domain()
     if srname:
-        domain += '/r/%s' % srname
-    return 'http://%s/?ad=%s' % (domain, l._fullname)
+        domain += f'/r/{srname}'
+    return f'http://{domain}/?ad={l._fullname}'
 
 
 def refund_url(link, campaign):
-    return "%spromoted/refund/%s/%s" % (g.payment_domain, link._id36,
-                                        campaign._id36)
+    return f"{g.payment_domain}promoted/refund/{link._id36}/{campaign._id36}"
 
 
 # booleans
 
 def is_awaiting_fraud_review(link):
-    return link.payment_flagged_reason and link.fraud == None
+    return link.payment_flagged_reason and link.fraud is None
 
 def is_promo(link):
     return (link and not link._deleted and link.promoted is not None
@@ -270,14 +260,13 @@ def get_transactions(link, campaigns):
 
     bids = Bid.lookup(thing_id=link._id)
     bid_dict = {(b.campaign, b.transaction): b for b in bids}
-    bids_by_campaign = {c._id: bid_dict[(c._id, c.trans_id)] for c in campaigns}
-    return bids_by_campaign
+    return {c._id: bid_dict[(c._id, c.trans_id)] for c in campaigns}
 
 def new_campaign(link, dates, bid, cpm, target, priority, location):
     campaign = PromoCampaign.create(link, target, bid, cpm, dates[0], dates[1],
                                     priority, location)
     PromotionWeights.add(link, campaign)
-    PromotionLog.add(link, 'campaign %s created' % campaign._id)
+    PromotionLog.add(link, f'campaign {campaign._id} created')
 
     if campaign.priority.cpm:
         author = Account._byID(link.author_id, data=True)
@@ -301,8 +290,8 @@ def edit_campaign(link, campaign, dates, bid, cpm, target, priority, location):
             link=link,campaign=campaign, previous=campaign.bid, current=bid)
         campaign.bid = bid
     if dates[0] != campaign.start_date or dates[1] != campaign.end_date:
-        original = '%s to %s' % (campaign.start_date, campaign.end_date)
-        edited = '%s to %s' % (dates[0], dates[1])
+        original = f'{campaign.start_date} to {campaign.end_date}'
+        edited = f'{dates[0]} to {dates[1]}'
         changed['dates'] = (original, edited)
         campaign.start_date = dates[0]
         campaign.end_date = dates[1]
@@ -319,8 +308,9 @@ def edit_campaign(link, campaign, dates, bid, cpm, target, priority, location):
         changed['location'] = (campaign.location, location)
         campaign.location = location
 
-    change_strs = map(lambda t: '%s: %s -> %s' % (t[0], t[1][0], t[1][1]),
-                      changed.iteritems())
+    change_strs = map(
+        lambda t: f'{t[0]}: {t[1][0]} -> {t[1][1]}', changed.iteritems()
+    )
     change_text = ', '.join(change_strs)
     campaign._commit()
 
@@ -335,7 +325,7 @@ def edit_campaign(link, campaign, dates, bid, cpm, target, priority, location):
 
     # record the changes
     if change_text:
-        PromotionLog.add(link, 'edited %s: %s' % (campaign, change_text))
+        PromotionLog.add(link, f'edited {campaign}: {change_text}')
 
     hooks.get_hook('promote.edit_campaign').call(link=link, campaign=campaign)
 
@@ -359,8 +349,7 @@ def terminate_campaign(link, campaign):
         update_promote_status(link, PROMOTE_STATUS.finished)
         all_live_promo_srnames(_update=True)
 
-    msg = 'terminated campaign %s (original end %s)' % (campaign._id,
-                                                        original_end.date())
+    msg = f'terminated campaign {campaign._id} (original end {original_end.date()})'
     PromotionLog.add(link, msg)
 
 
@@ -368,14 +357,13 @@ def delete_campaign(link, campaign):
     PromotionWeights.delete(link, campaign)
     void_campaign(link, campaign, reason='deleted_campaign')
     campaign.delete()
-    PromotionLog.add(link, 'deleted campaign %s' % campaign._id)
+    PromotionLog.add(link, f'deleted campaign {campaign._id}')
     hooks.get_hook('promote.delete_campaign').call(link=link, campaign=campaign)
 
 
 def void_campaign(link, campaign, reason):
     transactions = get_transactions(link, [campaign])
-    bid_record = transactions.get(campaign._id)
-    if bid_record:
+    if bid_record := transactions.get(campaign._id):
         a = Account._byID(link.author_id)
         authorize.void_transaction(a, bid_record.transaction, campaign._id)
         campaign.trans_id = NO_TRANSACTION
@@ -414,7 +402,7 @@ def auth_campaign(link, campaign, user, pay_id):
                                                         campaign.bid))
         PromotionLog.add(link, text)
         if trans_id < 0:
-            PromotionLog.add(link, 'FREEBIE (campaign: %s)' % campaign._id)
+            PromotionLog.add(link, f'FREEBIE (campaign: {campaign._id})')
 
         if trans_id:
             if is_finished(link):
@@ -431,8 +419,7 @@ def auth_campaign(link, campaign, user, pay_id):
             emailer.promo_bid(link, campaign.bid, campaign.start_date)
 
     else:
-        text = ("updated payment and/or bid for campaign %s: FAILED ('%s')"
-                % (campaign._id, reason))
+        text = f"updated payment and/or bid for campaign {campaign._id}: FAILED ('{reason}')"
         PromotionLog.add(link, text)
         trans_id = 0
 
@@ -538,12 +525,12 @@ def flag_payment(link, reason):
         return
 
     if link.payment_flagged_reason:
-        link.payment_flagged_reason += (", %s" % reason)
+        link.payment_flagged_reason += f", {reason}"
     else:
         link.payment_flagged_reason = reason
 
     link._commit()
-    PromotionLog.add(link, "payment flagged: %s" % reason)
+    PromotionLog.add(link, f"payment flagged: {reason}")
     queries.set_payment_flagged_link(link)
 
 
@@ -562,7 +549,7 @@ def reject_promotion(link, reason=None):
     was_live = is_promoted(link)
     update_promote_status(link, PROMOTE_STATUS.rejected)
     if reason:
-        PromotionLog.add(link, "rejected: %s" % reason)
+        PromotionLog.add(link, f"rejected: {reason}")
 
     # Send a rejection email (unless the advertiser requested the reject)
     if not c.user or c.user._id != link.author_id:
@@ -621,14 +608,12 @@ def _is_geotargeted_promo(link):
 
 
 def is_geotargeted_promo(link):
-    key = 'geotargeted_promo_%s' % link._id
-    from_cache = g.cache.get(key)
-    if not from_cache:
-        ret = _is_geotargeted_promo(link)
-        g.cache.set(key, ret, time=60)
-        return ret
-    else:
+    key = f'geotargeted_promo_{link._id}'
+    if from_cache := g.cache.get(key):
         return from_cache
+    ret = _is_geotargeted_promo(link)
+    g.cache.set(key, ret, time=60)
+    return ret
 
 
 def get_promos(date, sr_names=None, link=None):
@@ -758,11 +743,12 @@ def finalize_completed_campaigns(daysago=1):
     # check that traffic is up to date
     earliest_campaign = min(campaigns, key=lambda camp: camp.start_date)
     start, end = get_total_run(earliest_campaign)
-    missing_traffic = traffic.get_missing_traffic(start.replace(tzinfo=None),
-                                                  date.replace(tzinfo=None))
-    if missing_traffic:
-        raise ValueError("Can't finalize campaigns finished on %s."
-                         "Missing traffic from %s" % (date, missing_traffic))
+    if missing_traffic := traffic.get_missing_traffic(
+        start.replace(tzinfo=None), date.replace(tzinfo=None)
+    ):
+        raise ValueError(
+            f"Can't finalize campaigns finished on {date}.Missing traffic from {missing_traffic}"
+        )
 
     links = Link._byID([camp.link_id for camp in campaigns], data=True)
     underdelivered_campaigns = []
@@ -811,9 +797,9 @@ def refund_campaign(link, camp, billable_amount, billable_impressions):
         success = authorize.refund_transaction(owner, camp.trans_id,
                                                camp._id, refund_amount)
     except authorize.AuthorizeNetException as e:
-        text = ('%s $%s refund failed' % (camp, refund_amount))
+        text = f'{camp} ${refund_amount} refund failed'
         PromotionLog.add(link, text)
-        g.log.debug(text + ' (response: %s)' % e)
+        g.log.debug(f'{text} (response: {e})')
         return
 
     text = ('%s completed with $%s billable (%s impressions @ $%s).'
@@ -961,8 +947,7 @@ def get_billable_impressions(campaign):
     traffic_lookup = traffic.TargetedImpressionsByCodename.promotion_history
     imps = traffic_lookup(campaign._fullname, start.replace(tzinfo=None),
                           end.replace(tzinfo=None))
-    billable_impressions = sum(imp for date, (imp,) in imps)
-    return billable_impressions
+    return sum(imp for date, (imp,) in imps)
 
 
 def get_billable_amount(camp, impressions):
@@ -998,9 +983,7 @@ def successful_payment(link, campaign, ip, address):
     campaign.trans_ip = ip
     campaign.trans_billing_country = address.country
 
-    location = location_by_ips(ip)
-
-    if location:
+    if location := location_by_ips(ip):
         campaign.trans_ip_country = location.get("country_name")
 
         countries_match = (campaign.trans_billing_country.lower() ==

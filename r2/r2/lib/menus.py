@@ -220,7 +220,7 @@ class NavMenu(Styled):
 
         # add the menu style, but preserve existing css_class parameter
         style, base_css_class = menu_style(type)
-        css_class = base_css_class + ((' ' + css_class) if css_class else '')
+        css_class = base_css_class + (f' {css_class}' if css_class else '')
 
         # since the menu contains the path info, it's buttons need a
         # configuration pass to get them pointing to the proper urls
@@ -238,8 +238,7 @@ class NavMenu(Styled):
         Styled.__init__(self, style, _id=_id, css_class=css_class)
 
     def find_selected(self):
-        maybe_selected = [o for o in self.options if o.is_selected()]
-        if maybe_selected:
+        if maybe_selected := [o for o in self.options if o.is_selected()]:
             # pick the button with the most restrictive pathing
             maybe_selected.sort(lambda x, y:
                                 len(y.bare_path) - len(x.bare_path))
@@ -251,8 +250,7 @@ class NavMenu(Styled):
                     return opt
 
     def __iter__(self):
-        for opt in self.options:
-            yield opt
+        yield from self.options
 
     def cachable_attrs(self):
         return [
@@ -274,7 +272,7 @@ class NavButton(Styled):
     def __init__(self, title, dest, sr_path=True, nocname=False, aliases=None,
                  target="", use_params=False, css_class='', data=None):
         aliases = aliases or []
-        aliases = set(_force_unicode(a.rstrip('/')) for a in aliases)
+        aliases = {_force_unicode(a.rstrip('/')) for a in aliases}
         if dest:
             aliases.add(_force_unicode(dest.rstrip('/')))
 
@@ -292,7 +290,7 @@ class NavButton(Styled):
         Styled.__init__(self, self._style, css_class=css_class)
 
     def build(self, base_path=''):
-        base_path = ("%s/%s/" % (base_path, self.dest)).replace('//', '/')
+        base_path = f"{base_path}/{self.dest}/".replace('//', '/')
         self.bare_path = _force_unicode(base_path.replace('//', '/')).lower()
         self.bare_path = self.bare_path.rstrip('/')
         self.base_path = base_path
@@ -481,10 +479,7 @@ class JsButton(NavButton):
                            css_class=css_class, data=data)
 
     def build(self, base_path=''):
-        if self.tab_name:
-            self.path = '#' + self.tab_name
-        else:
-            self.path = 'javascript:void(0)'
+        self.path = f'#{self.tab_name}' if self.tab_name else 'javascript:void(0)'
 
     def is_selected(self):
         return False
@@ -599,9 +594,7 @@ class KindMenu(SortMenu):
     _title = N_("kind")
 
     def make_title(self, attr):
-        if attr == "all":
-            return _("all")
-        return menu[attr]
+        return _("all") if attr == "all" else menu[attr]
 
 
 class TimeMenu(SortMenu):
@@ -612,7 +605,7 @@ class TimeMenu(SortMenu):
     _title = N_("links from")
 
     @classmethod
-    def operator(self, time):
+    def operator(cls, time):
         from r2.models import Link
         if time != 'all':
             return Link.c._date >= timeago(time)

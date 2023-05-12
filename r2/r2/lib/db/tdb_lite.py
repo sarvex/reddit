@@ -33,22 +33,20 @@ class tdb_lite(object):
         return metadata
 
     def index_str(self, table, name, on, where = None):
-        index_str = 'create index idx_%s_' % name
+        index_str = f'create index idx_{name}_'
         index_str += table.name
-        index_str += ' on '+ table.name + ' (%s)' % on
+        index_str += f' on {table.name}' + f' ({on})'
         if where:
-            index_str += ' where %s' % where
+            index_str += f' where {where}'
         return index_str
 
     def create_table(self, table, index_commands=None):
         t = table
-        if self.gc.db_create_tables:
-            #@@hackish?
-            if not t.bind.has_table(t.name):
-                t.create(checkfirst = False)
-                if index_commands:
-                    for i in index_commands:
-                        t.bind.execute(i)
+        if self.gc.db_create_tables and not t.bind.has_table(t.name):
+            t.create(checkfirst = False)
+            if index_commands:
+                for i in index_commands:
+                    t.bind.execute(i)
 
     def py2db(self, val, return_kind=False):
         if isinstance(val, bool):
@@ -64,14 +62,11 @@ class tdb_lite(object):
             kind = 'pickle'
             val = pickle.dumps(val)
 
-        if return_kind:
-            return (val, kind)
-        else:
-            return val
+        return (val, kind) if return_kind else val
 
     def db2py(self, val, kind):
         if kind == 'bool':
-            val = True if val is 't' else False
+            val = val is 't'
         elif kind == 'num':
             try:
                 val = int(val)

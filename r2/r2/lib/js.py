@@ -241,10 +241,10 @@ class PermissionsDataSource(DataSource):
             props = []
             for key, value in obj.iteritems():
                 value_encoded = cls._make_marked_json(value)
-                props.append("%s: %s" % (key, value_encoded))
+                props.append(f"{key}: {value_encoded}")
             return "{%s}" % ",".join(props)
         elif isinstance(obj, basestring):
-            return "r.N_(%s)" % json.dumps(obj)
+            return f"r.N_({json.dumps(obj)})"
         else:
             raise ValueError, "unsupported type"
 
@@ -319,14 +319,14 @@ class StringsSource(LocaleSpecificSource):
             # so we'll just make it null
             strings = tup(msg.string)
             data[key] = [None] + list(strings)
-        return "r.i18n.addMessages(%s)" % json.dumps(data)
+        return f"r.i18n.addMessages({json.dumps(data)})"
 
 
 class PluralForms(LocaleSpecificSource):
     def get_localized_source(self, lang):
         catalog = get_catalog(lang)
         validate_plural_forms(catalog.plural_expr)
-        return "r.i18n.setPluralForms('%s')" % catalog.plural_expr
+        return f"r.i18n.setPluralForms('{catalog.plural_expr}')"
 
 
 class LocalizedModule(Module):
@@ -345,7 +345,7 @@ class LocalizedModule(Module):
     @staticmethod
     def languagize_path(path, lang):
         path_name, path_ext = os.path.splitext(path)
-        return path_name + "." + lang + path_ext
+        return f"{path_name}.{lang}{path_ext}"
 
     def build(self, minifier):
         Module.build(self, minifier)
@@ -403,20 +403,19 @@ class LocalizedModule(Module):
         for lang, unused in iter_langs():
             yield LocalizedModule.languagize_path(self.path, lang)
 
-module = {}
-
 catch_errors = "try {{ {content} }} catch (err) {{ r.sendError('Error running module', '{name}', ':', err) }}"
 
-module["reddit-embed-base"] = Module("reddit-embed-base.js",
-    "lib/es5-shim.js",
-    "lib/json2.js",
-    "embed/custom-event.js",
-    "embed/utils.js",
-    "embed/post-message.js",
-    "embed/pixel-tracking.js",
-)
-
-
+module = {
+    "reddit-embed-base": Module(
+        "reddit-embed-base.js",
+        "lib/es5-shim.js",
+        "lib/json2.js",
+        "embed/custom-event.js",
+        "embed/utils.js",
+        "embed/post-message.js",
+        "embed/pixel-tracking.js",
+    )
+}
 module["reddit-embed"] = Module("reddit-embed.js",
     module["reddit-embed-base"],
     "embed/embed.js",
@@ -585,7 +584,7 @@ def src(*names, **kwargs):
     for name in names:
         urls = module[name].url(**kwargs)
 
-        if isinstance(urls, str) or isinstance(urls, unicode):
+        if isinstance(urls, (str, unicode)):
             sources.append(urls)
         else:
             for url in list(urls):

@@ -161,5 +161,4 @@ class PluginLoader(object):
 
     def get_documented_controllers(self):
         for plugin in self:
-            for controller, url_prefix in plugin.get_documented_controllers():
-                yield controller, url_prefix
+            yield from plugin.get_documented_controllers()

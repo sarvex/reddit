@@ -483,17 +483,14 @@ class StylesheetValidator(object):
                                           {"message": message})
                     continue
 
-            validator = validators_by_type.get(node.type)
-
-            if validator:
+            if validator := validators_by_type.get(node.type):
                 for error in tup(validator(node)):
                     if error:
                         yield error
-            else:
-                if not ignored_types or node.type not in ignored_types:
-                    yield ValidationError(node.source_line,
-                                          "UNEXPECTED_TOKEN",
-                                          {"token": node.type})
+            elif not ignored_types or node.type not in ignored_types:
+                yield ValidationError(node.source_line,
+                                      "UNEXPECTED_TOKEN",
+                                      {"token": node.type})
 
     def check_for_evil_codepoints(self, source_lines):
         for line_number, line_text in enumerate(source_lines, start=1):
@@ -527,11 +524,7 @@ class StylesheetValidator(object):
             errors.append(error)
         errors.sort(key=lambda e: e.line)
 
-        if not errors:
-            serialized = rcssmin.cssmin(tinycss2.serialize(nodes))
-        else:
-            serialized = ""
-
+        serialized = rcssmin.cssmin(tinycss2.serialize(nodes)) if not errors else ""
         return serialized.encode("utf-8"), errors
 
 

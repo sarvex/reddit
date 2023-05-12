@@ -78,7 +78,7 @@ class WebLogController(RedditController):
             if log.get('tag') in valid_frontend_log_tags:
                 tag = log['tag']
 
-            g.stats.simple_event('frontend.error.' + tag)
+            g.stats.simple_event(f'frontend.error.{tag}')
 
             g.log.warning('[web frontend] %s: %s | U: %s FP: %s UA: %s',
                           level, log['msg'], uid, log['url'],

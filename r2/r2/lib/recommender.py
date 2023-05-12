@@ -130,9 +130,7 @@ def get_recommended_content(prefs, src, settings):
     """
     # numbers chosen empirically to give enough results for explore page
     num_liked = 10  # how many liked srs to use when generating the recs
-    num_recs = 20  # how many recommended srs to ask for
     num_discovery = 2  # how many discovery-related subreddits to mix in
-    num_rising = 4  # how many rising links to mix in
     num_items = 20  # total items to return
     rising_items = discovery_items = comment_items = hot_items = []
 
@@ -152,6 +150,7 @@ def get_recommended_content(prefs, src, settings):
     liked_srs = [srs[sr_id36] for sr_id36 in liked_srid36s]
     discovery_srs = [srs[sr_id36] for sr_id36 in discovery_srid36s]
     if settings.personalized:
+        num_recs = 20  # how many recommended srs to ask for
         # generate recs from srs we know the user likes
         recommended_srs = get_recommendations(liked_srs,
                                               count=num_recs,
@@ -173,7 +172,8 @@ def get_recommended_content(prefs, src, settings):
         discovery_items = get_hot_items(discovery_srs, TYPE_DISCOVERY, 'disc')
     if settings.rising:
         # grab some (non-personalized) rising items
-        omit_sr_ids = set(int(id36, 36) for id36 in omit_srid36s)
+        omit_sr_ids = {int(id36, 36) for id36 in omit_srid36s}
+        num_rising = 4  # how many rising links to mix in
         rising_items = get_rising_items(omit_sr_ids, count=num_rising)
     # combine all items and randomize order to get a mix of types
     all_recs = list(chain(rising_items,
@@ -202,10 +202,7 @@ def get_hot_items(srs, item_type, src):
     hot_srs = {sr._id: sr for sr in srs}  # for looking up sr by id
     hot_link_fullnames = normalized_hot([sr._id for sr in srs])
     hot_links = Link._by_fullname(hot_link_fullnames, return_dict=False)
-    hot_items = []
-    for l in hot_links:
-        hot_items.append(ExploreItem(item_type, src, hot_srs[l.sr_id], l))
-    return hot_items
+    return [ExploreItem(item_type, src, hot_srs[l.sr_id], l) for l in hot_links]
 
 
 def get_rising_items(omit_sr_ids, count=4):
@@ -217,9 +214,10 @@ def get_rising_items(omit_sr_ids, count=4):
     rising_links = Link._by_fullname(link_fullnames_to_show,
                                      return_dict=False,
                                      data=True)
-    rising_items = [ExploreItem(TYPE_RISING, 'ris', Subreddit._byID(l.sr_id), l)
-                   for l in rising_links]
-    return rising_items
+    return [
+        ExploreItem(TYPE_RISING, 'ris', Subreddit._byID(l.sr_id), l)
+        for l in rising_links
+    ]
 
 
 def get_comment_items(srs, src, count=4):
@@ -238,12 +236,10 @@ def get_comment_items(srs, src, count=4):
         top_comments.extend(listing.things)
     srs = Subreddit._byID([com.sr_id for com in top_comments])
     links = Link._byID([com.link_id for com in top_comments])
-    comment_items = [ExploreItem(TYPE_COMMENT,
-                                 src,
-                                 srs[com.sr_id],
-                                 links[com.link_id],
-                                 com) for com in top_comments]
-    return comment_items
+    return [
+        ExploreItem(TYPE_COMMENT, src, srs[com.sr_id], links[com.link_id], com)
+        for com in top_comments
+    ]
 
 
 def get_discovery_srid36s():
@@ -283,7 +279,7 @@ class SRRecommendation(tdb_cassandra.View):
         srid36s = tup(srid36)
         to_omit = set(to_omit)
         to_omit.update(srid36s)  # don't show the originals
-        rowkeys = ['%s.%s' % (source, srid36) for srid36 in srid36s]
+        rowkeys = [f'{source}.{srid36}' for srid36 in srid36s]
 
         # fetch multiple sets of recommendations, one for each input srid36
         d = sgm(g.cache, rowkeys, SRRecommendation._byID, prefix='srr.')

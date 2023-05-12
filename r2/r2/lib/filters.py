@@ -96,7 +96,7 @@ class _Unsafe(unicode):
 
 
 def _force_unicode(text):
-    if text == None:
+    if text is None:
         return u''
 
     if isinstance(text, unicode):
@@ -161,7 +161,7 @@ _js_escapes = {
     ord(u'\u2029'): u'\\u2029',
 }
 # Escape every ASCII character with a value less than 32.
-_js_escapes.update((ord('%c' % z), u'\\u%04X' % z) for z in range(32))
+_js_escapes |= ((ord('%c' % z), u'\\u%04X' % z) for z in range(32))
 
 
 def jssafe(text=u''):
@@ -270,34 +270,34 @@ def generate_table_of_contents(soup, prefix):
     previous = 0
     for header in headers:
         contents = u''.join(header.findAll(text=True))
-        
+
         # In the event of an empty header, skip
         if not contents:
             continue
-        
+
         # Convert html entities to avoid ugly header ids
         aid = unicode(BeautifulSoup(contents, convertEntities=BeautifulSoup.XML_ENTITIES))
         # Prefix with PREFIX_ to avoid ID conflict with the rest of the page
-        aid = u'%s_%s' % (prefix, aid.replace(" ", "_").lower())
+        aid = f'{prefix}_{aid.replace(" ", "_").lower()}'
         # Convert down to ascii replacing special characters with hex
         aid = str(title_re.sub(lambda c: '.%X' % ord(c.group()), aid))
-        
+
         # Check to see if a tag with the same ID exists
         id_num = header_ids[aid] + 1
         header_ids[aid] += 1
         # Only start numbering ids with the second instance of an id
         if id_num > 1:
             aid = '%s%d' % (aid, id_num)
-        
+
         header['id'] = aid
-        
+
         li = Tag(soup, "li", [("class", aid)])
-        a = Tag(soup, "a", [("href", "#%s" % aid)])
+        a = Tag(soup, "a", [("href", f"#{aid}")])
         a.string = contents
         li.append(a)
-        
+
         thislevel = int(header.name[-1])
-        
+
         if previous and thislevel > previous:
             newul = Tag(soup, "ul")
             newul.level = thislevel
@@ -310,10 +310,10 @@ def generate_table_of_contents(soup, prefix):
             while level and parent.level > thislevel:
                 parent = parent.findParent("ul")
                 level -= 1
-        
+
         previous = thislevel
         parent.append(li)
-    
+
     return tocdiv
 
 

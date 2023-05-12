@@ -64,10 +64,10 @@ class TrafficPage(Reddit):
                         NamedButton("languages"),
                         NamedButton("adverts")]
 
-        toolbar = [PageNameNav("nomenu", title=self.title),
-                   NavMenu(main_buttons, base_path="/traffic", type="tabmenu")]
-
-        return toolbar
+        return [
+            PageNameNav("nomenu", title=self.title),
+            NavMenu(main_buttons, base_path="/traffic", type="tabmenu"),
+        ]
 
 
 class SitewideTrafficPage(TrafficPage):
@@ -83,11 +83,7 @@ class LanguageTrafficPage(TrafficPage):
     """Base page for interface language traffic summaries or details."""
 
     def __init__(self, langcode):
-        if langcode:
-            content = LanguageTraffic(langcode)
-        else:
-            content = LanguageTrafficSummary()
-
+        content = LanguageTraffic(langcode) if langcode else LanguageTrafficSummary()
         TrafficPage.__init__(self, content)
 
 
@@ -95,10 +91,7 @@ class AdvertTrafficPage(TrafficPage):
     """Base page for advert traffic summaries or details."""
 
     def __init__(self, code):
-        if code:
-            content = AdvertTraffic(code)
-        else:
-            content = AdvertTrafficSummary()
+        content = AdvertTraffic(code) if code else AdvertTrafficSummary()
         TrafficPage.__init__(self, content)
 
 
@@ -130,26 +123,31 @@ class RedditTraffic(Templated):
 
         for interval in ("month", "day", "hour"):
             columns = [
-                dict(color=COLORS.UPVOTE_ORANGE,
-                     title=_("uniques by %s" % interval),
-                     shortname=_("uniques")),
-                dict(color=COLORS.DOWNVOTE_BLUE,
-                     title=_("pageviews by %s" % interval),
-                     shortname=_("pageviews")),
+                dict(
+                    color=COLORS.UPVOTE_ORANGE,
+                    title=_(f"uniques by {interval}"),
+                    shortname=_("uniques"),
+                ),
+                dict(
+                    color=COLORS.DOWNVOTE_BLUE,
+                    title=_(f"pageviews by {interval}"),
+                    shortname=_("pageviews"),
+                ),
             ]
 
             data = self.get_data_for_interval(interval, columns)
 
-            title = _("traffic by %s" % interval)
-            graph = TimeSeriesChart("traffic-" + interval,
-                                    title,
-                                    interval,
-                                    columns,
-                                    data,
-                                    self.traffic_last_modified,
-                                    classes=["traffic-table"],
-                                    make_period_link=self.make_period_link,
-                                   )
+            title = _(f"traffic by {interval}")
+            graph = TimeSeriesChart(
+                f"traffic-{interval}",
+                title,
+                interval,
+                columns,
+                data,
+                self.traffic_last_modified,
+                classes=["traffic-table"],
+                make_period_link=self.make_period_link,
+            )
             self.tables.append(graph)
 
         try:
@@ -171,8 +169,7 @@ class RedditTraffic(Templated):
             # make a summary of the averages for each day of the week
             self.dow_summary = []
             for dow in xrange(7):
-                day_count = days_total[dow]
-                if day_count:
+                if day_count := days_total[dow]:
                     avg_uniques = uniques_total[dow] / day_count
                     avg_pageviews = pageviews_total[dow] / day_count
                     self.dow_summary.append((dow,
@@ -224,11 +221,11 @@ def make_subreddit_traffic_report(subreddits=None, num=None):
             name = _("[frontpage]")
             url = None
         elif srname in Subreddit._specials:
-            name = "[%s]" % srname
+            name = f"[{srname}]"
             url = None
         else:
-            name = "/r/%s" % srname
-            url = name + "/about/traffic"
+            name = f"/r/{srname}"
+            url = f"{name}/about/traffic"
 
         report.append(((name, url), data))
     return report
@@ -319,10 +316,7 @@ class AdvertTrafficSummary(RedditTraffic):
     @staticmethod
     def get_sr_name(name):
         """Return the display name for a subreddit."""
-        if name == g.default_sr:
-            return _("frontpage")
-        else:
-            return "/r/" + name
+        return _("frontpage") if name == g.default_sr else f"/r/{name}"
 
     @staticmethod
     def get_ad_name(code, things=None):
@@ -346,19 +340,18 @@ class AdvertTrafficSummary(RedditTraffic):
             thing = things.get(fullname)
 
         if not thing:
-            if code.startswith("dart_"):
-                srname = code.split("_", 1)[1]
-                srname = AdvertTrafficSummary.get_sr_name(srname)
-                return "DART: " + srname
-            else:
+            if not code.startswith("dart_"):
                 return code
+            srname = code.split("_", 1)[1]
+            srname = AdvertTrafficSummary.get_sr_name(srname)
+            return f"DART: {srname}"
         elif isinstance(thing, Link):
-            return "Link: " + thing.title
+            return f"Link: {thing.title}"
         elif isinstance(thing, Subreddit):
             srname = AdvertTrafficSummary.get_sr_name(thing.name)
-            name = "300x100: " + srname
+            name = f"300x100: {srname}"
             if campaign:
-                name += " (%s)" % campaign
+                name += f" ({campaign})"
             return name
 
     @staticmethod
@@ -366,8 +359,8 @@ class AdvertTrafficSummary(RedditTraffic):
         """Given a codename, return the canonical URL for its traffic page."""
         thing = things.get(code)
         if isinstance(thing, Link):
-            return "/traffic/%s" % thing._id36
-        return "/traffic/adverts/%s" % code
+            return f"/traffic/{thing._id36}"
+        return f"/traffic/adverts/{code}"
 
 
 class LanguageTraffic(RedditTraffic):
@@ -399,14 +392,16 @@ class AdvertTraffic(RedditTraffic):
         RedditTraffic.__init__(self, name)
 
     def get_data_for_interval(self, interval, columns):
-        columns[1]["title"] = _("impressions by %s" % interval)
+        columns[1]["title"] = _(f"impressions by {interval}")
         columns[1]["shortname"] = _("impressions")
 
         columns += [
             dict(shortname=_("unique clicks")),
-            dict(color=COLORS.MISCELLANEOUS,
-                 title=_("clicks by %s" % interval),
-                 shortname=_("total clicks")),
+            dict(
+                color=COLORS.MISCELLANEOUS,
+                title=_(f"clicks by {interval}"),
+                shortname=_("total clicks"),
+            ),
         ]
 
         imps = traffic.AdImpressionsByCodename.history(interval, self.code)
@@ -416,7 +411,7 @@ class AdvertTraffic(RedditTraffic):
 
 class SubredditTraffic(RedditTraffic):
     def __init__(self):
-        RedditTraffic.__init__(self, "/r/" + c.site.name)
+        RedditTraffic.__init__(self, f"/r/{c.site.name}")
 
         if c.user_is_sponsor:
             fullname = c.site._fullname
@@ -443,7 +438,7 @@ class SubredditTraffic(RedditTraffic):
             "q": "timestamp:{:d}..{:d}".format(int(epoch_seconds(date)),
                                                int(epoch_seconds(end))),
         })
-        return "/r/%s/search?%s" % (c.site.name, query)
+        return f"/r/{c.site.name}/search?{query}"
 
     def get_dow_summary(self):
         return traffic.PageviewsBySubreddit.history("day", c.site.name)
@@ -467,10 +462,7 @@ class SubredditTraffic(RedditTraffic):
 
 def _clickthrough_rate(impressions, clicks):
     """Return the click-through rate percentage."""
-    if impressions:
-        return (float(clicks) / impressions) * 100.
-    else:
-        return 0
+    return (float(clicks) / impressions) * 100. if impressions else 0
 
 
 def _is_promo_preliminary(end_date):
@@ -503,8 +495,7 @@ def get_promo_traffic(thing, start, end):
     elif clicks and not imps:
         imps = [(clicks[0][0], (0,))]
 
-    history = traffic.zip_timeseries(imps, clicks, order="ascending")
-    return history
+    return traffic.zip_timeseries(imps, clicks, order="ascending")
 
 
 def get_billable_traffic(campaign):
@@ -535,8 +526,9 @@ class PromotedLinkTraffic(Templated):
         self.next = None
         self.has_live_campaign = False
         self.has_early_campaign = False
-        self.detail_name = ('campaign %s' % campaign._id36 if campaign
-                                                           else 'all campaigns')
+        self.detail_name = (
+            f'campaign {campaign._id36}' if campaign else 'all campaigns'
+        )
 
         editable = c.user_is_sponsor or c.user._id == thing.author_id
         self.traffic_last_modified = traffic.get_traffic_last_modified()
@@ -582,7 +574,7 @@ class PromotedLinkTraffic(Templated):
             'live': is_live,
             'active': is_active,
             'url': url,
-            'csv': url + '.csv',
+            'csv': f'{url}.csv',
             'total': is_total,
         }
 
@@ -616,7 +608,7 @@ class PromotedLinkTraffic(Templated):
             location = camp.location_str
             spent = promote.get_spent_amount(camp)
             is_active = self.campaign and self.campaign._id36 == camp._id36
-            url = '/traffic/%s/%s' % (self.thing._id36, camp._id36)
+            url = f'/traffic/{self.thing._id36}/{camp._id36}'
             is_total = False
             row = self.make_campaign_table_row(camp._id36, start, end, target,
                                                location, camp.bid, spent,
@@ -638,7 +630,7 @@ class PromotedLinkTraffic(Templated):
         location = '---'
         is_live = False
         is_active = not self.campaign
-        url = '/traffic/%s' % self.thing._id36
+        url = f'/traffic/{self.thing._id36}'
         is_total = True
         row = self.make_campaign_table_row(_('total'), start, end, target,
                                            location, total_budget, total_spent,
@@ -651,13 +643,9 @@ class PromotedLinkTraffic(Templated):
         """Shorten range for display and add next/prev buttons."""
         start, end = promote.get_traffic_dates(thing)
 
-        # Check date of latest traffic (campaigns can end early).
-        history = list(get_promo_traffic(thing, start, end))
-        if history:
+        if history := list(get_promo_traffic(thing, start, end)):
             end = max(date for date, data in history)
             end = end.replace(tzinfo=g.tz)  # get_promo_traffic returns tz naive
-                                            # datetimes but is actually g.tz
-
         if self.period:
             display_start = self.after
             display_end = self.before
@@ -676,7 +664,7 @@ class PromotedLinkTraffic(Templated):
                     'after': None,
                     'before': display_start.strftime('%Y%m%d%H'),
                 })
-                self.prev = '%s?%s' % (request.path, urllib.urlencode(p))
+                self.prev = f'{request.path}?{urllib.urlencode(p)}'
             else:
                 display_start = start
 
@@ -686,7 +674,7 @@ class PromotedLinkTraffic(Templated):
                     'after': display_end.strftime('%Y%m%d%H'),
                     'before': None,
                 })
-                self.next = '%s?%s' % (request.path, urllib.urlencode(p))
+                self.next = f'{request.path}?{urllib.urlencode(p)}'
             else:
                 display_end = end
         else:
@@ -776,7 +764,7 @@ class SubredditTrafficReport(Templated):
                 self.report = make_subreddit_traffic_report(subreddits.values())
 
             param = urllib.quote(self.textarea)
-            self.csv_url = "/traffic/subreddits/report.csv?subreddits=" + param
+            self.csv_url = f"/traffic/subreddits/report.csv?subreddits={param}"
 
         Templated.__init__(self)
 

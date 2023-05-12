@@ -87,7 +87,7 @@ def set_lang(lang, graceful_fail=False, fallback_lang=None, **kwargs):
 def load_data(lang_path, domain=None, extension='data'):
     if domain is None:
         domain = pylons.config['pylons.package']
-    filename = os.path.join(lang_path, domain + '.' + extension)
+    filename = os.path.join(lang_path, f'{domain}.{extension}')
     with open(filename) as datafile:
         data = json.load(datafile)
     return data

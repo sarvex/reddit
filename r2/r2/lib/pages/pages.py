@@ -181,7 +181,7 @@ def responsive(res, space_compress=None):
         if c.allowed_callback:
             # Add a comment to the beginning to prevent the "Rosetta Flash"
             # XSS when an attacker controls the beginning of a resource
-            res = "/**/%s(%s)" % (websafe_json(c.allowed_callback), res)
+            res = f"/**/{websafe_json(c.allowed_callback)}({res})"
     elif space_compress:
         res = spaceCompress(res)
     return res
@@ -270,7 +270,7 @@ class Reddit(Templated):
             u.set_extension("")
             u.hostname = g.domain
             if g.domain_prefix:
-                u.hostname = "%s.%s" % (g.domain_prefix, u.hostname)
+                u.hostname = f"{g.domain_prefix}.{u.hostname}"
             self.canonical_link = u.unparse()
 
         if self.show_infobar:
@@ -369,18 +369,19 @@ class Reddit(Templated):
                     return make_url_https(sr.stylesheet_url)
                 elif sr.stylesheet_url_https:
                     return sr.stylesheet_url_https
-            else:
-                if sr.stylesheet_url:
-                    return sr.stylesheet_url
-                elif sr.stylesheet_url_http:
-                    return sr.stylesheet_url_http
+            elif sr.stylesheet_url:
+                return sr.stylesheet_url
+            elif sr.stylesheet_url_http:
+                return sr.stylesheet_url_http
 
     def wiki_actions_menu(self, moderator=False):
-        buttons = []
-
-        buttons.append(NamedButton("wikirecentrevisions",
-                                   css_class="wikiaction-revisions",
-                                   dest="/wiki/revisions"))
+        buttons = [
+            NamedButton(
+                "wikirecentrevisions",
+                css_class="wikiaction-revisions",
+                dest="/wiki/revisions",
+            )
+        ]
 
         buttons.append(NamedButton("wikipageslist",
                            css_class="wikiaction-pages",
@@ -409,13 +410,20 @@ class Reddit(Templated):
             is_admin or c.site.is_moderator_with_perms(c.user, *perms))
 
         if is_single_subreddit and is_moderator_with_perms('config'):
-            buttons.append(NavButton(menu.community_settings,
-                                     css_class="reddit-edit",
-                                     dest="edit"))
-            buttons.append(NavButton(menu.edit_stylesheet,
-                                     css_class="edit-stylesheet",
-                                     dest="stylesheet"))
-
+            buttons.extend(
+                (
+                    NavButton(
+                        menu.community_settings,
+                        css_class="reddit-edit",
+                        dest="edit",
+                    ),
+                    NavButton(
+                        menu.edit_stylesheet,
+                        css_class="edit-stylesheet",
+                        dest="stylesheet",
+                    ),
+                )
+            )
         if is_moderator_with_perms('mail'):
             buttons.append(NamedButton("modmail",
                                     dest="message/inbox",

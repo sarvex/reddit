@@ -40,9 +40,13 @@ def admin_menu(**kwargs):
         NavButton(menu.errors, "error log"),
     ]
 
-    admin_menu = NavMenu(buttons, title='admin tools', base_path='/admin',
-                         type="lightdrop", **kwargs)
-    return admin_menu
+    return NavMenu(
+        buttons,
+        title='admin tools',
+        base_path='/admin',
+        type="lightdrop",
+        **kwargs
+    )
 
 class AdminSidebar(Templated):
     def __init__(self, user):

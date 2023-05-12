@@ -23,7 +23,7 @@
 from pylons import c
 
 def api_type(subtype = ''):
-    return 'api-' + subtype if subtype else 'api'
+    return f'api-{subtype}' if subtype else 'api'
 
 def is_api(subtype = ''):
     return c.render_style and c.render_style.startswith(api_type(subtype))

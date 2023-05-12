@@ -127,14 +127,14 @@ def _make_transaction(trans_cls, amount, user, pay_id, order=None,
     # the optional test field makes the transaction a test, and will
     # make the response be the error code corresponding to int(test).
     if isinstance(test, int):
-        extra.update({
+        extra |= {
             "x_test_request": "TRUE",
             "x_card_num": test_card.ERRORCARD.cardNumber,
             "x_amount": test,
-        })
+        }
 
     if include_request_ip:
-        extra.update({"x_customer_ip": request.ip})
+        extra["x_customer_ip"] = request.ip
 
     # using the transaction, generate a transaction request and make it
     req = CreateCustomerProfileTransactionRequest(transaction=trans,
@@ -188,10 +188,9 @@ def void_transaction(user, trans_id, campaign, test=None):
     bid =  Bid.one(transaction=trans_id, campaign=campaign)
     bid.void()
     if trans_id > 0:
-        res = _make_transaction(ProfileTransVoid,
-                                None, user, None, trans_id=trans_id,
-                                test=test)
-        return res
+        return _make_transaction(
+            ProfileTransVoid, None, user, None, trans_id=trans_id, test=test
+        )
 
 
 @export
@@ -202,7 +201,7 @@ def is_charged_transaction(trans_id, campaign):
     except NotFound:
         return False
     except MultipleResultsFound:
-        g.log.error('Multiple bids for trans_id %s' % trans_id)
+        g.log.error(f'Multiple bids for trans_id {trans_id}')
         return False
 
     return bid.is_charged() or bid.is_refund()
@@ -239,7 +238,6 @@ def refund_transaction(user, trans_id, campaign_id, amount, test=None):
     bid =  Bid.one(transaction=trans_id, campaign=campaign_id)
     if trans_id < 0:
         bid.refund(amount)
-        return True
     else:
         success, res = _make_transaction(ProfileTransRefund, amount, user,
                                          bid.pay_id, trans_id=trans_id,
@@ -249,4 +247,5 @@ def refund_transaction(user, trans_id, campaign_id, amount, test=None):
         elif success == False:
             msg = "Refund failed, response: %r" % res
             raise AuthorizeNetException(msg)
-        return True
+
+    return True

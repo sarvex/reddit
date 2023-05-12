@@ -81,9 +81,9 @@ def notify_user_added(rel_type, author, user, target, message=None):
     srname = target.path.rstrip("/")
     d = {
         "url": srname,
-        "title": "%s: %s" % (srname, target.title),
-        "author": "/u/" + author.name,
-        "user": "/u/" + user.name,
+        "title": f"{srname}: {target.title}",
+        "author": f"/u/{author.name}",
+        "user": f"/u/{user.name}",
     }
 
     if "pm" in msgs and author != user:

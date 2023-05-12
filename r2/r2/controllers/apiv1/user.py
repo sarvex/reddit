@@ -158,7 +158,7 @@ class APIv1UserController(OAuth2ResourceController):
     def PATCH_prefs(self, validated_prefs):
         user_prefs = c.user.preferences()
         for short_name, new_value in validated_prefs.iteritems():
-            pref_name = "pref_" + short_name
+            pref_name = f"pref_{short_name}"
             user_prefs[pref_name] = new_value
         vprefs.filter_prefs(user_prefs, c.user)
         vprefs.set_prefs(c.user, user_prefs)

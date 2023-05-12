@@ -86,8 +86,9 @@ def load_environment(global_conf={}, app_conf={}, setup_globals=True):
 
         def mako_module_path(filename, uri):
             filename = filename.lstrip('/').replace('/', '-')
-            path = os.path.join(module_directory, filename + ".py")
+            path = os.path.join(module_directory, f"{filename}.py")
             return os.path.abspath(path)
+
     else:
         # we're probably in "paster run standalone" mode. we'll just avoid
         # caching templates since we don't know where they should go.

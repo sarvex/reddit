@@ -38,7 +38,7 @@ class PoliciesController(RedditController):
     @validate(requested_rev=nop('v'))
     def GET_policy_page(self, page, requested_rev):
         if c.render_style == 'compact':
-            self.redirect('/wiki/' + page)
+            self.redirect(f'/wiki/{page}')
         if page == 'privacypolicy':
             wiki_name = g.wiki_page_privacy_policy
             pagename = _('privacy policy')
@@ -95,8 +95,7 @@ class PoliciesController(RedditController):
         ).render()
 
     def _number_sections(self, soup):
-        count = 1
-        for para in soup.find('div', 'md').findAll(['p'], recursive=False):
+        for count, para in enumerate(soup.find('div', 'md').findAll(['p'], recursive=False), start=1):
             a = Tag(soup, 'a', [
                 ('class', 'p-anchor'),
                 ('id', 'p_%d' % count),
@@ -105,12 +104,11 @@ class PoliciesController(RedditController):
             a.append(str(count))
             para.insert(0, a)
             para.insert(1, ' ')
-            count += 1
 
     def _linkify_headings(self, soup):
         md_el = soup.find('div', 'md')
         for heading in md_el.findAll(['h1', 'h2', 'h3'], recursive=False):
-            heading_a = Tag(soup, "a", [('href', '#%s' % heading['id'])])
+            heading_a = Tag(soup, "a", [('href', f"#{heading['id']}")])
             heading_a.contents = heading.contents
             heading.contents = []
             heading.append(heading_a)

@@ -51,11 +51,7 @@ class MediaembedController(MinimalController):
             if not constant_time_compare(credentials or "", expected_mac):
                 abort(404)
 
-        if not c.secure:
-            media_object = link.media_object
-        else:
-            media_object = link.secure_media_object
-
+        media_object = link.media_object if not c.secure else link.secure_media_object
         if not media_object:
             abort(404)
         elif isinstance(media_object, dict):

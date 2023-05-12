@@ -53,22 +53,19 @@ class UserRelManager(object):
         return r
 
     def remove(self, thing, user):
-        r = self.get(thing, user)
-        if r:
+        if r := self.get(thing, user):
             r._delete()
             return True
         return False
 
     def mutate(self, thing, user, **attrs):
-        r = self.get(thing, user)
-        if r:
-            for k, v in attrs.iteritems():
-                setattr(r, k, v)
-            r._commit()
-            r._permission_class = self.permission_class
-            return r
-        else:
+        if not (r := self.get(thing, user)):
             return self.add(thing, user, **attrs)
+        for k, v in attrs.iteritems():
+            setattr(r, k, v)
+        r._commit()
+        r._permission_class = self.permission_class
+        return r
 
     def ids(self, thing):
         return [r._thing2_id for r in self.by_thing(thing)]
@@ -96,8 +93,8 @@ class MemoizedUserRelManager(UserRelManager):
 
         self.disable_ids_fn = disable_ids_fn
         self.disable_reverse_ids_fn = disable_reverse_ids_fn
-        self.ids_fn_name = self.name + '_ids'
-        self.reverse_ids_fn_name = 'reverse_' + self.name + '_ids'
+        self.ids_fn_name = f'{self.name}_ids'
+        self.reverse_ids_fn_name = f'reverse_{self.name}_ids'
 
         sup = super(MemoizedUserRelManager, self)
         self.ids = memoize(self.ids_fn_name)(sup.ids)
@@ -149,12 +146,12 @@ def UserRel(name, relation, disable_ids_fn=False, disable_reverse_ids_fn=False,
         def _bind(cls, fn):
             return types.UnboundMethodType(fn, None, cls)
 
-    setattr(UR, 'is_' + name, UR._bind(mgr.get))
-    setattr(UR, 'get_' + name, UR._bind(mgr.get))
-    setattr(UR, 'add_' + name, UR._bind(mgr.add))
-    setattr(UR, 'remove_' + name, UR._bind(mgr.remove))
-    setattr(UR, 'each_' + name, UR._bind(mgr.by_thing))
-    setattr(UR, name + '_permission_class', permission_class)
+    setattr(UR, f'is_{name}', UR._bind(mgr.get))
+    setattr(UR, f'get_{name}', UR._bind(mgr.get))
+    setattr(UR, f'add_{name}', UR._bind(mgr.add))
+    setattr(UR, f'remove_{name}', UR._bind(mgr.remove))
+    setattr(UR, f'each_{name}', UR._bind(mgr.by_thing))
+    setattr(UR, f'{name}_permission_class', permission_class)
     if not disable_ids_fn:
         setattr(UR, mgr.ids_fn_name, UR._bind(mgr.ids))
     if not disable_reverse_ids_fn:

@@ -62,7 +62,7 @@ class PostController(ApiController):
             return abort(BadRequestError(errors.INVALID_PREF))
         set_prefs(c.user, prefs)
         c.user._commit()
-        u = UrlParser(c.site.path + "prefs")
+        u = UrlParser(f"{c.site.path}prefs")
         u.update_query(done = 'true')
         if c.cname:
             u.put_in_frame()
@@ -76,15 +76,14 @@ class PostController(ApiController):
               over18 = nop('over18'),
               dest = VDestination(default = '/'))
     def POST_over18(self, over18, dest):
-        if over18 == 'yes':
-            if c.user_is_loggedin and not c.errors:
-                c.user.pref_over_18 = True
-                c.user._commit()
-            else:
-                c.cookies.add("over18", "1")
-            return self.redirect(dest)
-        else:
+        if over18 != 'yes':
             return self.redirect('/')
+        if c.user_is_loggedin and not c.errors:
+            c.user.pref_over_18 = True
+            c.user._commit()
+        else:
+            c.cookies.add("over18", "1")
+        return self.redirect(dest)
 
 
     @csrf_exempt

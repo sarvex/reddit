@@ -88,9 +88,7 @@ def get_step_states(emr_connection, jobflowid):
 
     """
 
-    jobflow = emr_connection.describe_jobflow(jobflowid)
-
-    if jobflow:
+    if jobflow := emr_connection.describe_jobflow(jobflowid):
         return [(step.name, step.state) for step in jobflow.steps]
     else:
         return []
@@ -126,8 +124,7 @@ def get_jobflow_by_name(emr_connection, jobflow_name):
 
 
 def terminate_jobflow(emr_connection, jobflow_name):
-    jobflow = get_jobflow_by_name(emr_connection, jobflow_name)
-    if jobflow:
+    if jobflow := get_jobflow_by_name(emr_connection, jobflow_name):
         emr_connection.terminate_jobflow(jobflow.jobflowid)
 
 
@@ -145,8 +142,9 @@ def modify_slave_count(emr_connection, jobflow_name, num_slaves=1):
             break
 
     if slave_instancegroupid and slave_instancerequestcount != num_slaves:
-        print ('Modifying slave instance count of %s (%s -> %s)' %
-               (jobflow_name, slave_instancerequestcount, num_slaves))
+        print(
+            f'Modifying slave instance count of {jobflow_name} ({slave_instancerequestcount} -> {num_slaves})'
+        )
         emr_connection.modify_instance_groups(slave_instancegroupid,
                                               num_slaves)
 

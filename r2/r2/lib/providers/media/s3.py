@@ -91,6 +91,6 @@ class S3MediaProvider(MediaProvider):
         )
 
         if g.s3_media_direct:
-            return "http://%s/%s/%s" % (g.s3_media_domain, bucket_name, name)
+            return f"http://{g.s3_media_domain}/{bucket_name}/{name}"
         else:
-            return "http://%s/%s" % (bucket_name, name)
+            return f"http://{bucket_name}/{name}"

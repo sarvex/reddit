@@ -88,9 +88,9 @@ class SimpleXMLObject(object):
 
     @staticmethod
     def simple_tag(name, content, **attrs):
-        attrs = " ".join('%s="%s"' % (k, v) for k, v in attrs.iteritems())
+        attrs = " ".join(f'{k}="{v}"' for k, v in attrs.iteritems())
         if attrs:
-            attrs = " " + attrs
+            attrs = f" {attrs}"
         return ("<%(name)s%(attrs)s>%(content)s</%(name)s>" %
                 dict(name=name, content=content, attrs=attrs))
 
@@ -126,9 +126,10 @@ class SimpleXMLObject(object):
 
 
     def __repr__(self):
-        return "<%s {%s}>" % (self.__class__.__name__,
-                              ",".join("%s=%s" % (k, repr(getattr(self, k)))
-                                       for k in self._used_keys))
+        return "<%s {%s}>" % (
+            self.__class__.__name__,
+            ",".join(f"{k}={repr(getattr(self, k))}" for k in self._used_keys),
+        )
 
     def _name(self):
         name = self.__class__.__name__
@@ -325,22 +326,17 @@ class CreateCustomerProfileRequest(AuthorizeNetRequest):
     re_lost_id = re.compile("A duplicate record with ID (\d+) already exists")
     def process_error(self, res):
         if self.is_error_code(res, Errors.DUPLICATE_RECORD):
-            # authorize.net has a record for this customer but we don't. get
-            # the correct id from the error message and update our db
-            matches = self.re_lost_id.match(res.find("text").contents[0])
-            if matches:
+            if matches := self.re_lost_id.match(res.find("text").contents[0]):
                 match_groups = matches.groups()
                 CustomerID.set(self._user, match_groups[0])
-                g.log.debug("Updated missing authorize.net id for user %s" % self._user._id)
+                g.log.debug(f"Updated missing authorize.net id for user {self._user._id}")
             else:
                 # could happen if the format of the error message changes.
                 msg = ("Failed to fix duplicate authorize.net profile id. "
                        "re_lost_id regexp may need to be updated. Response: %r" 
                        % res)
                 raise AuthorizeNetException(msg)
-        # otherwise, we might have sent a user that already had a customer ID
-        cust_id = CustomerID.get_id(self._user)
-        if cust_id:
+        if cust_id := CustomerID.get_id(self._user):
             return cust_id
         return AuthorizeNetRequest.process_error(self, res)
 

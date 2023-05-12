@@ -162,11 +162,13 @@ def _rewrite_css(css_filename, sprite_path, images):
         image_filename, should_stretch = _extract_css_info(match)
         position = locations[image_filename]
 
-        return ''.join((
-            'background-image: url(%s);' % sprite_path,
-            'background-position: -%dpx -%dpx;' % position,
-            'background-repeat: %s;' % ('repeat' if should_stretch else 'no-repeat'),
-        ))
+        return ''.join(
+            (
+                f'background-image: url({sprite_path});',
+                'background-position: -%dpx -%dpx;' % position,
+                f"background-repeat: {'repeat' if should_stretch else 'no-repeat'};",
+            )
+        )
 
     # read in the css and replace sprite references
     with open(css_filename, 'r') as f:

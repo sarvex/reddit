@@ -30,9 +30,7 @@ class AwardsController(RedditController):
 
     @validate(VAdmin())
     def GET_index(self):
-        res = AdminPage(content = AdminAwards(),
-                        title = 'awards').render()
-        return res
+        return AdminPage(content=AdminAwards(), title='awards').render()
 
     @validate(VAdmin(),
               award = VAwardByCodename('awardcn'),
@@ -44,10 +42,10 @@ class AwardsController(RedditController):
         if award is None:
             abort(404, 'page not found')
 
-        res = AdminPage(content = AdminAwardGive(award, recipient, desc,
-                                                 url, hours),
-                        title='give an award').render()
-        return res
+        return AdminPage(
+            content=AdminAwardGive(award, recipient, desc, url, hours),
+            title='give an award',
+        ).render()
 
     @validate(VAdmin(),
               award = VAwardByCodename('awardcn'))
@@ -55,6 +53,6 @@ class AwardsController(RedditController):
         if award is None:
             abort(404, 'page not found')
 
-        res = AdminPage(content = AdminAwardWinners(award),
-                        title='award winners').render()
-        return res
+        return AdminPage(
+            content=AdminAwardWinners(award), title='award winners'
+        ).render()

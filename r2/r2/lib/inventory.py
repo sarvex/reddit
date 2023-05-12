@@ -85,16 +85,14 @@ def _min_daily_pageviews_by_sr(ndays=NDAYS_TO_QUERY, end_date=None):
     # row looks like: ('lightpainting-GET_listing', 16)
     retval = {}
     for row in q:
-        m = PAGEVIEWS_REGEXP.match(row[0])
-        if m:
+        if m := PAGEVIEWS_REGEXP.match(row[0]):
             retval[m.group(1)] = row[1]
     return retval
 
 
 def get_date_range(start, end):
     start, end = map(to_date, [start, end])
-    dates = [start + timedelta(i) for i in xrange((end - start).days)]
-    return dates
+    return [start + timedelta(i) for i in xrange((end - start).days)]
 
 
 def get_campaigns_by_date(srs, start, end, ignore=None):
@@ -110,10 +108,9 @@ def get_campaigns_by_date(srs, start, end, ignore=None):
     # deleted
     campaigns = filter(lambda camp: not camp._deleted, campaigns)
 
-    transaction_ids = {camp.trans_id for camp in campaigns
-                                     if camp.trans_id != NO_TRANSACTION}
-
-    if transaction_ids:
+    if transaction_ids := {
+        camp.trans_id for camp in campaigns if camp.trans_id != NO_TRANSACTION
+    }:
         transactions = Bid.query().filter(Bid.transaction.in_(transaction_ids))
         # index transactions by transaction and campaign id because freebies
         # reuse the same transaction id (they always use -link id)
@@ -179,15 +176,15 @@ def get_predicted_pageviews(srs, location=None):
         base_pageviews = daily_inventory.get(sr.name, 0)
         ret[sr.name] = int(base_pageviews * default_factor * location_factor)
 
-    if is_single:
-        return ret[srs[0].name]
-    else:
-        return ret
+    return ret[srs[0].name] if is_single else ret
 
 
 def make_target_name(target):
-    name = ("collection: %s" % target.collection.name if target.is_collection
-                                           else target.subreddit_name)
+    name = (
+        f"collection: {target.collection.name}"
+        if target.is_collection
+        else target.subreddit_name
+    )
     return name
 
 
@@ -245,7 +242,7 @@ def get_available_pageviews(targets, start, end, location=None, datestr=False,
     all_campaigns = find_campaigns(target_srs, start, end, ignore)
 
     # get predicted pageviews for each subreddit and location
-    all_sr_names = set(sr.name for sr in target_srs)
+    all_sr_names = {sr.name for sr in target_srs}
     all_sr_names |= set(chain.from_iterable(
         campaign.target.subreddit_names for campaign in all_campaigns
     ))
@@ -255,12 +252,10 @@ def get_available_pageviews(targets, start, end, location=None, datestr=False,
 
     # determine booked impressions by target and location for each day
     dates = set(get_date_range(start, end))
-    booked_dict = {}
-    for date in dates:
-        booked_dict[date] = {}
-        for location in locations:
-            booked_dict[date][location] = defaultdict(int)
-
+    booked_dict = {
+        date: {location: defaultdict(int) for location in locations}
+        for date in dates
+    }
     for campaign in all_campaigns:
         camp_dates = set(get_date_range(campaign.start_date, campaign.end_date))
         sr_names = tuple(sorted(campaign.target.subreddit_names))
@@ -294,18 +289,17 @@ def get_available_pageviews(targets, start, end, location=None, datestr=False,
             min_pageviews = min(pageviews_by_location.values())
             ret[name][datekey(date)] = max(0, min_pageviews)
 
-    if is_single:
-        name = make_target_name(targets[0])
-        return ret[name]
-    else:
+    if not is_single:
         return ret
+    name = make_target_name(targets[0])
+    return ret[name]
 
 
 def get_oversold(target, start, end, daily_request, ignore=None, location=None):
     available_by_date = get_available_pageviews(target, start, end, location,
                                                 datestr=True, ignore=ignore)
-    oversold = {}
-    for datestr, available in available_by_date.iteritems():
-        if available < daily_request:
-            oversold[datestr] = available
-    return oversold
+    return {
+        datestr: available
+        for datestr, available in available_by_date.iteritems()
+        if available < daily_request
+    }

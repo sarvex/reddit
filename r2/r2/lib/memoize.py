@@ -45,8 +45,7 @@ def memoize(iden, time = 0, stale=False, timeout=30):
 
             if res is None:
                 # not cached, we should calculate it.
-                with make_lock("memoize", 'memoize_lock(%s)' % key,
-                               time=timeout, timeout=timeout):
+                with make_lock("memoize", f'memoize_lock({key})', time=timeout, timeout=timeout):
 
                     # see if it was completed while we were waiting
                     # for the lock
@@ -68,6 +67,7 @@ def memoize(iden, time = 0, stale=False, timeout=30):
 
         new_fn.memoized_fn = fn
         return new_fn
+
     return memoize_fn
 
 @memoize('test')

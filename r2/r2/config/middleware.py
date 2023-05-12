@@ -86,13 +86,11 @@ def error_mapper(code, message, environ, global_conf=None, **kw):
         # StatusBasedForward expects a relative URL (no SCRIPT_NAME)
         d = dict(code = code, message = message)
 
-        exception = environ.get('r2.controller.exception')
-        if exception:
+        if exception := environ.get('r2.controller.exception'):
             d['explanation'] = exception.explanation
-            error_data = getattr(exception, 'error_data', None)
-            if error_data:
+            if error_data := getattr(exception, 'error_data', None):
                 environ['extra_error_data'] = error_data
-        
+
         if environ.get('REDDIT_CNAME'):
             d['cnameframe'] = 1
         if environ.get('REDDIT_NAME'):
@@ -114,12 +112,11 @@ def error_mapper(code, message, environ, global_conf=None, **kw):
                 if response.headers.has_key('x-sup-id'):
                     d['x-sup-id'] = response.headers['x-sup-id']
 
-        extension = environ.get("extension")
-        if extension:
-            url = '/error/document/.%s?%s' % (extension, urllib.urlencode(d))
-        else:
-            url = '/error/document/?%s' % (urllib.urlencode(d))
-        return url
+        return (
+            f'/error/document/.{extension}?{urllib.urlencode(d)}'
+            if (extension := environ.get("extension"))
+            else f'/error/document/?{urllib.urlencode(d)}'
+        )
 
 
 class ProfilingMiddleware(object):
@@ -204,8 +201,7 @@ class DomainMiddleware(object):
                 environ['reddit-prefer-lang'] = subdomain
             else:
                 sr_redirect = subdomain
-                subdomains.remove(subdomain)
-
+                subdomains.remove(sr_redirect)
         if 'reddit-prefer-lang' in environ:
             prefix_parts.insert(0, environ['reddit-prefer-lang'])
         if prefix_parts:
@@ -216,8 +212,7 @@ class DomainMiddleware(object):
             if not subdomains and g.domain_prefix:
                 subdomains.append(g.domain_prefix)
             subdomains.append(g.domain)
-            redir = "%s/r/%s/%s" % ('.'.join(subdomains),
-                                    sr_redirect, environ['FULLPATH'])
+            redir = f"{'.'.join(subdomains)}/r/{sr_redirect}/{environ['FULLPATH']}"
             redir = "http://" + redir.replace('//', '/')
 
             start_response("301 Moved Permanently", [("Location", redir)])
@@ -234,8 +229,7 @@ class SubredditMiddleware(object):
 
     def __call__(self, environ, start_response):
         path = environ['PATH_INFO']
-        sr = self.sr_pattern.match(path)
-        if sr:
+        if sr := self.sr_pattern.match(path):
             environ['subreddit'] = sr.groups()[0]
             environ['PATH_INFO'] = self.sr_pattern.sub('', path) or '/'
         elif path.startswith(('/subreddits', '/reddits')):
@@ -292,9 +286,8 @@ class FullPathMiddleware(object):
 
     def __call__(self, environ, start_response):
         environ['FULLPATH'] = environ.get('PATH_INFO')
-        qs = environ.get('QUERY_STRING')
-        if qs:
-            environ['FULLPATH'] += '?' + qs
+        if qs := environ.get('QUERY_STRING'):
+            environ['FULLPATH'] += f'?{qs}'
         return self.app(environ, start_response)
 
 class StaticTestMiddleware(object):
@@ -319,9 +312,9 @@ class LimitUploadSize(object):
         self.max_size = max_size
 
     def __call__(self, environ, start_response):
-        cl_key = 'CONTENT_LENGTH'
         is_error = environ.get("pylons.error_call", False)
         if not is_error and environ['REQUEST_METHOD'] == 'POST':
+            cl_key = 'CONTENT_LENGTH'
             if cl_key not in environ:
                 start_response("411 Length Required", [])
                 return ['<html><body>length required</body></html>']
@@ -485,8 +478,7 @@ def make_app(global_conf, full_stack=True, **app_conf):
 
     app = LimitUploadSize(app)
 
-    profile_directory = g.config.get('profile_directory')
-    if profile_directory:
+    if profile_directory := g.config.get('profile_directory'):
         app = ProfilingMiddleware(app, profile_directory)
 
     app = DomainListingMiddleware(app)

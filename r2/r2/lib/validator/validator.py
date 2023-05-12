@@ -57,12 +57,12 @@ from functools import wraps
 
 def visible_promo(article):
     is_promo = getattr(article, "promoted", None) is not None
-    is_author = (c.user_is_loggedin and
-                 c.user._id == article.author_id)
-
     # promos are visible only if comments are not disabled and the
     # user is either the author or the link is live/previously live.
     if is_promo:
+        is_author = (c.user_is_loggedin and
+                     c.user._id == article.author_id)
+
         return (c.user_is_sponsor or
                 is_author or
                 (not article.disable_comments and
@@ -83,11 +83,7 @@ class Validator(object):
     default_param = None
     def __init__(self, param=None, default=None, post=True, get=True, url=True,
                  body=False, docs=None):
-        if param:
-            self.param = param
-        else:
-            self.param = self.default_param
-
+        self.param = param if param else self.default_param
         self.default = default
         self.post, self.get, self.url, self.docs = post, get, url, docs
         self.body = body
@@ -105,10 +101,7 @@ class Validator(object):
         self.has_errors = True
 
     def param_docs(self):
-        param_info = {}
-        for param in filter(None, tup(self.param)):
-            param_info[param] = None
-        return param_info
+        return {param: None for param in filter(None, tup(self.param))}
 
     def __call__(self, url):
         self.has_errors = False
@@ -184,10 +177,10 @@ def set_api_docs(fn, simple_vals, param_vals, extra_vals=None):
     doc['notes'] = notes
 
 def _validators_handle_csrf(simple_vals, param_vals):
-    for validator in chain(simple_vals, param_vals.itervalues()):
-        if getattr(validator, 'handles_csrf', False):
-            return True
-    return False
+    return any(
+        getattr(validator, 'handles_csrf', False)
+        for validator in chain(simple_vals, param_vals.itervalues())
+    )
 
 def validate(*simple_vals, **param_vals):
     """Validation decorator that delegates error handling to the controller.
@@ -242,7 +235,10 @@ def api_validate(response_type=None, add_api_type_doc=False):
                         c.render_style = api_type(response_type)
 
                     # generate a response object
-                    if response_type == "html" and not request.params.get('api_type') == "json":
+                    if (
+                        response_type == "html"
+                        and request.params.get('api_type') != "json"
+                    ):
                         responder = JQueryResponse()
                     else:
                         responder = JsonResponse()
@@ -270,8 +266,11 @@ def api_validate(response_type=None, add_api_type_doc=False):
                 newfn.handles_csrf = _validators_handle_csrf(simple_vals,
                                                              param_vals)
                 return newfn
+
             return val
+
         return _api_validate
+
     return wrap
 
 
@@ -314,10 +313,7 @@ def _validatedForm(self, self_method, responder, simple_vals, param_vals,
         elif (isinstance(validator, (VRatelimit, VThrottledLogin)) and
               form.has_errors('ratelimit', errors.RATELIMIT)):
             form.ratelimit(validator.seconds)
-    if val:
-        return val
-    else:
-        return self.api_wrapper(responder.make_response())
+    return val if val else self.api_wrapper(responder.make_response())
 
 @api_validate("html", add_api_type_doc=True)
 def validatedForm(self, self_method, responder, simple_vals, param_vals,
@@ -332,12 +328,12 @@ def validatedMultipartForm(self, self_method, responder, simple_vals,
         val = self_method(*a, **kw)
         if val:
             return val
-        else:
-            data = json.dumps(responder.make_response())
-            response.content_type = "text/html"
-            return ('<html><head><script type="text/javascript">\n'
-                    'parent.$.handleResponse()(%s)\n'
-                    '</script></head></html>') % filters.websafe_json(data)
+        data = json.dumps(responder.make_response())
+        response.content_type = "text/html"
+        return ('<html><head><script type="text/javascript">\n'
+                'parent.$.handleResponse()(%s)\n'
+                '</script></head></html>') % filters.websafe_json(data)
+
     return _validatedForm(self, wrapped_self_method, responder, simple_vals,
                           param_vals, *a, **kw)
 
@@ -357,11 +353,11 @@ class VLang(Validator):
     def validate_lang(lang, strict=False):
         if lang in g.all_languages:
             return lang
+        if strict:
+            raise ValueError("invalid language %r" % lang)
+
         else:
-            if not strict:
-                return g.lang
-            else:
-                raise ValueError("invalid language %r" % lang)
+            return g.lang
     def run(self, lang):
         return VLang.validate_lang(lang)
 
@@ -394,24 +390,22 @@ class VThing(Validator):
         self.redirect = redirect
 
     def run(self, thing_id):
-        if thing_id:
-            try:
-                tid = int(thing_id, 36)
-                thing = self.thingclass._byID(tid, True)
-                if thing.__class__ != self.thingclass:
-                    raise TypeError("Expected %s, got %s" %
-                                    (self.thingclass, thing.__class__))
-                return thing
-            except (NotFound, ValueError):
-                if self.redirect:
-                    abort(404, 'page not found')
-                else:
-                    return None
+        if not thing_id:
+            return
+        try:
+            tid = int(thing_id, 36)
+            thing = self.thingclass._byID(tid, True)
+            if thing.__class__ != self.thingclass:
+                raise TypeError(f"Expected {self.thingclass}, got {thing.__class__}")
+            return thing
+        except (NotFound, ValueError):
+            if self.redirect:
+                abort(404, 'page not found')
+            else:
+                return None
 
     def param_docs(self):
-        return {
-            self.param: "The base 36 ID of a " + self.thingclass.__name__
-        }
+        return {self.param: f"The base 36 ID of a {self.thingclass.__name__}"}
 
 class VLink(VThing):
     def __init__(self, param, redirect = True, *a, **kw):
@@ -630,10 +624,8 @@ class VMarkdown(Validator):
                 return
 
             import sys
-            user = "???"
-            if c.user_is_loggedin:
-                user = c.user.name
-            g.log.error("HAX by %s: %s" % (user, text))
+            user = c.user.name if c.user_is_loggedin else "???"
+            g.log.error(f"HAX by {user}: {text}")
             s = sys.exc_info()
             # reraise the original error with the original stack trace
             raise s[1], None, s[2]
@@ -654,10 +646,12 @@ class VMarkdownLength(VMarkdown):
 
     def run(self, text, text2=''):
         text = text or text2
-        text = VLength(self.param, self.max_length,
-                       empty_error=self.empty_error,
-                       length_error=self.length_error).run(text)
-        if text:
+        if text := VLength(
+            self.param,
+            self.max_length,
+            empty_error=self.empty_error,
+            length_error=self.length_error,
+        ).run(text):
             return VMarkdown.run(self, text)
         else:
             return ''
@@ -702,8 +696,7 @@ class VSubredditName(VRequired):
 
 class VAvailableSubredditName(VSubredditName):
     def run(self, name):
-        name = VSubredditName.run(self, name)
-        if name:
+        if name := VSubredditName.run(self, name):
             try:
                 a = Subreddit._by_name(name)
                 return self.error(errors.SUBREDDIT_EXISTS)
@@ -717,8 +710,7 @@ class VSRByName(Validator):
             self.set_error(errors.BAD_SR_NAME, code=400)
         else:
             try:
-                sr = Subreddit._by_name(sr_name)
-                return sr
+                return Subreddit._by_name(sr_name)
             except NotFound:
                 self.set_error(errors.SUBREDDIT_NOEXIST, code=400)
 
@@ -787,10 +779,8 @@ class VFriendOfMine(VAccountByName):
     def run(self, name):
         # Must be logged in
         VUser().run()
-        maybe_friend = VAccountByName.run(self, name)
-        if maybe_friend:
-            friend_rel = Account.get_friend(c.user, maybe_friend)
-            if friend_rel:
+        if maybe_friend := VAccountByName.run(self, name):
+            if friend_rel := Account.get_friend(c.user, maybe_friend):
                 return friend_rel
             else:
                 self.error(errors.NOT_FRIEND)
@@ -798,14 +788,11 @@ class VFriendOfMine(VAccountByName):
 
 
 def fullname_regex(thing_cls = None, multiple = False):
-    pattern = "[%s%s]" % (Relation._type_prefix, Thing._type_prefix)
-    if thing_cls:
-        pattern += utils.to36(thing_cls._type_id)
-    else:
-        pattern += r"[0-9a-z]+"
+    pattern = f"[{Relation._type_prefix}{Thing._type_prefix}]"
+    pattern += utils.to36(thing_cls._type_id) if thing_cls else r"[0-9a-z]+"
     pattern += r"_[0-9a-z]+"
     if multiple:
-        pattern = r"(%s *,? *)+" % pattern
+        pattern = f"({pattern} *,? *)+"
     return re.compile(r"\A" + pattern + r"\Z")
 
 class VByName(Validator):
@@ -831,7 +818,7 @@ class VByName(Validator):
         if self.backend == 'cassandra':
             # tdb_cassandra.Thing objects can't use the regex
             if items and self.multiple:
-                items = [item for item in self.splitter.split(items)]
+                items = list(self.splitter.split(items))
                 if self.limit and len(items) > self.limit:
                     return self.set_error(errors.TOO_MANY_THING_IDS)
             if items:
@@ -864,20 +851,17 @@ class VByName(Validator):
 
     def param_docs(self):
         thingtype = (self.thing_cls or Thing).__name__.lower()
-        if self.multiple:
-            return {
-                self.param: ("A comma-separated list of %s [fullnames]"
-                             "(#fullnames)" % thingtype)
+        return (
+            {
+                self.param: f"A comma-separated list of {thingtype} [fullnames](#fullnames)"
             }
-        else:
-            return {
-                self.param: "[fullname](#fullnames) of a %s" % thingtype,
-            }
+            if self.multiple
+            else {self.param: f"[fullname](#fullnames) of a {thingtype}"}
+        )
 
 class VByNameIfAuthor(VByName):
     def run(self, fullname):
-        thing = VByName.run(self, fullname)
-        if thing:
+        if thing := VByName.run(self, fullname):
             if not thing._loaded: thing._load()
             if c.user_is_loggedin and thing.author_id == c.user._id:
                 return thing
@@ -930,9 +914,7 @@ class VModhash(Validator):
             self.set_error('INVALID_MODHASH')
 
     def param_docs(self):
-        return {
-            '%s / X-Modhash header' % self.param: 'a [modhash](#modhashes)',
-        }
+        return {f'{self.param} / X-Modhash header': 'a [modhash](#modhashes)'}
 
 
 class VModhashIfLoggedIn(Validator):
@@ -951,9 +933,7 @@ class VModhashIfLoggedIn(Validator):
             VModhash(fatal=self.fatal).run(uh)
 
     def param_docs(self):
-        return {
-            '%s / X-Modhash header' % self.param: 'a [modhash](#modhashes)',
-        }
+        return {f'{self.param} / X-Modhash header': 'a [modhash](#modhashes)'}
 
 
 class VVotehash(Validator):
@@ -1158,9 +1138,7 @@ class VSrSpecial(VByName):
 
 class VSubmitParent(VByName):
     def run(self, fullname, fullname2):
-        #for backwards compatability (with iphone app)
-        fullname = fullname or fullname2
-        if fullname:
+        if fullname := fullname or fullname2:
             parent = VByName.run(self, fullname)
             if not isinstance(parent, (Comment, Link, Message)):
                 abort(403, "forbidden")
@@ -1183,12 +1161,11 @@ class VSubmitParent(VByName):
                         self.set_error(errors.DELETED_COMMENT)
             if isinstance(parent, Message):
                 return parent
-            else:
-                link = parent
-                if isinstance(parent, Comment):
-                    link = Link._byID(parent.link_id, data=True)
-                if link and c.user_is_loggedin and can_comment_link(link):
-                    return parent
+            link = parent
+            if isinstance(parent, Comment):
+                link = Link._byID(parent.link_id, data=True)
+            if link and c.user_is_loggedin and can_comment_link(link):
+                return parent
         #else
         abort(403, "forbidden")
 
@@ -1271,8 +1248,7 @@ class VSubscribeSR(VByName):
 
 class VCollection(Validator):
     def run(self, name):
-        collection = Collection.by_name(name)
-        if collection:
+        if collection := Collection.by_name(name):
             return collection
         self.set_error(errors.COLLECTION_NOEXIST)
 
@@ -1286,15 +1262,13 @@ class VPromoTarget(Validator):
         elif targeting == "none":
             return Target(Frontpage.name)
         elif targeting == "collection":
-            collection = VCollection("collection").run(collection_name)
-            if collection:
+            if collection := VCollection("collection").run(collection_name):
                 return Target(collection)
             else:
                 # VCollection added errors so no need to do anything
                 return
         elif targeting == "one":
-            sr = VSubmitSR("sr", promotion=True).run(sr_name)
-            if sr:
+            if sr := VSubmitSR("sr", promotion=True).run(sr_name):
                 return Target(sr.name)
             else:
                 # VSubmitSR added errors so no need to do anything
@@ -1307,11 +1281,10 @@ MIN_PASSWORD_LENGTH = 6
 
 class VPassword(Validator):
     def run(self, password):
-        if not (password and len(password) >= MIN_PASSWORD_LENGTH):
-            self.set_error(errors.SHORT_PASSWORD, {"chars": MIN_PASSWORD_LENGTH})
-            self.set_error(errors.BAD_PASSWORD)
-        else:
+        if password and len(password) >= MIN_PASSWORD_LENGTH:
             return password.encode('utf8')
+        self.set_error(errors.SHORT_PASSWORD, {"chars": MIN_PASSWORD_LENGTH})
+        self.set_error(errors.BAD_PASSWORD)
 
     def param_docs(self):
         return {
@@ -1349,9 +1322,7 @@ def chkuser(x):
         if any(ch.isspace() for ch in x):
             return None
         return str(x) if user_rx.match(x) else None
-    except TypeError:
-        return None
-    except UnicodeEncodeError:
+    except (TypeError, UnicodeEncodeError):
         return None
 
 class VUname(VRequired):
@@ -1367,20 +1338,21 @@ class VUname(VRequired):
             self.set_error(errors.USERNAME_TOO_SHORT, msg_params=msg_params)
             self.set_error(errors.BAD_USERNAME)
             return
-        user_name = chkuser(user_name)
-        if not user_name:
+        if user_name := chkuser(user_name):
+            try:
+                a = Account._by_name(user_name, True)
+                return (
+                    self.set_error(errors.USERNAME_TAKEN_DEL)
+                    if a._deleted
+                    else self.set_error(errors.USERNAME_TAKEN)
+                )
+            except NotFound:
+                return user_name
+
+        else:
             self.set_error(errors.USERNAME_INVALID_CHARACTERS)
             self.set_error(errors.BAD_USERNAME)
             return
-        else:
-            try:
-                a = Account._by_name(user_name, True)
-                if a._deleted:
-                   return self.set_error(errors.USERNAME_TAKEN_DEL)
-                else:
-                   return self.set_error(errors.USERNAME_TAKEN)
-            except NotFound:
-                return user_name
 
     def param_docs(self):
         return {
@@ -1504,13 +1476,10 @@ class VUrl(VRequired):
         if not url:
             return self.error(errors.BAD_URL)
 
-        if url == 'self':
-            if self.allow_self:
-                return url
-            else:
-                self.error(errors.BAD_URL)
-        else:
+        if url == 'self' and self.allow_self or url != 'self':
             return url
+        else:
+            self.error(errors.BAD_URL)
 
     def param_docs(self):
         return {self.param: "a valid URL"}
@@ -1553,10 +1522,7 @@ class VExistingUname(VRequired):
             except (NotFound, ValueError):
                 self.error(errors.USER_DOESNT_EXIST)
 
-        # make sure the name satisfies our user name regexp before
-        # bothering to look it up.
-        name = chkuser(name)
-        if name:
+        if name := chkuser(name):
             try:
                 return Account._by_name(name)
             except NotFound:
@@ -1617,9 +1583,7 @@ class VBoolean(Validator):
             # val is already a bool object, no processing needed
             return val
         lv = str(val).lower()
-        if lv == 'off' or lv == '' or lv[0] in ("f", "n"):
-            return False
-        return bool(val)
+        return False if lv == 'off' or not lv or lv[0] in ("f", "n") else bool(val)
 
     def param_docs(self):
         return {
@@ -1749,7 +1713,7 @@ class VMenu(Validator):
 
     def run(self, sort, where):
         if self.remember:
-            pref = "%s_%s" % (where, self.nav.name)
+            pref = f"{where}_{self.nav.name}"
             user_prefs = copy(c.user.sort_options) if c.user else {}
             user_pref = user_prefs.get(pref)
 
@@ -1773,8 +1737,9 @@ class VMenu(Validator):
 
     def param_docs(self):
         return {
-            self.param[0]: 'one of (%s)' % ', '.join("`%s`" % s
-                                                  for s in self.nav._options),
+            self.param[0]: (
+                'one of (%s)' % ', '.join(f"`{s}`" for s in self.nav._options)
+            )
         }
 
 
@@ -1788,28 +1753,26 @@ class VRatelimit(Validator):
         self.seconds = None
         Validator.__init__(self, *a, **kw)
 
-    def run (self):
+    def run(self):
         if g.disable_ratelimit:
             return
 
         if c.user_is_loggedin:
             hook = hooks.get_hook("account.is_ratelimit_exempt")
-            ratelimit_exempt = hook.call_until_return(account=c.user)
-            if ratelimit_exempt:
+            if ratelimit_exempt := hook.call_until_return(account=c.user):
                 return
 
         to_check = []
         if self.rate_user and c.user_is_loggedin:
-            to_check.append('user' + str(c.user._id36))
+            to_check.append(f'user{str(c.user._id36)}')
         if self.rate_ip:
-            to_check.append('ip' + str(request.ip))
+            to_check.append(f'ip{str(request.ip)}')
 
-        r = g.cache.get_multi(to_check, self.prefix)
-        if r:
+        if r := g.cache.get_multi(to_check, self.prefix):
             expire_time = max(r.values())
             time = utils.timeuntil(expire_time)
 
-            g.log.debug("rate-limiting %s from %s" % (self.prefix, r.keys()))
+            g.log.debug(f"rate-limiting {self.prefix} from {r.keys()}")
 
             # when errors have associated field parameters, we'll need
             # to add that here
@@ -1825,16 +1788,15 @@ class VRatelimit(Validator):
                 self.set_error(self.error)
 
     @classmethod
-    def ratelimit(self, rate_user = False, rate_ip = False, prefix = "rate_",
-                  seconds = None):
+    def ratelimit(cls, rate_user = False, rate_ip = False, prefix = "rate_", seconds = None):
         to_set = {}
         if seconds is None:
             seconds = g.RL_RESET_SECONDS
         expire_time = datetime.now(g.tz) + timedelta(seconds = seconds)
         if rate_user and c.user_is_loggedin:
-            to_set['user' + str(c.user._id36)] = expire_time
+            to_set[f'user{str(c.user._id36)}'] = expire_time
         if rate_ip:
-            to_set['ip' + str(request.ip)] = expire_time
+            to_set[f'ip{str(request.ip)}'] = expire_time
         g.cache.set_multi(to_set, prefix = prefix, time = seconds)
 
 class VDelay(Validator):
@@ -1843,12 +1805,11 @@ class VDelay(Validator):
         self.seconds = None
         Validator.__init__(self, *a, **kw)
 
-    def run (self):
+    def run(self):
         if g.disable_ratelimit:
             return
-        key = "VDelay-%s-%s" % (self.category, request.ip)
-        prev_violations = g.cache.get(key)
-        if prev_violations:
+        key = f"VDelay-{self.category}-{request.ip}"
+        if prev_violations := g.cache.get(key):
             time = utils.timeuntil(prev_violations["expire_time"])
             remaining = prev_violations["expire_time"] - datetime.now(g.tz)
             self.seconds = remaining.total_seconds()
@@ -1857,22 +1818,18 @@ class VDelay(Validator):
                                field='vdelay', code=429)
 
     @classmethod
-    def record_violation(self, category, seconds = None, growfast=False):
+    def record_violation(cls, category, seconds = None, growfast=False):
         if seconds is None:
             seconds = g.RL_RESET_SECONDS
 
-        key = "VDelay-%s-%s" % (category, request.ip)
+        key = f"VDelay-{category}-{request.ip}"
         prev_violations = g.cache.get(key)
         if prev_violations is None:
             prev_violations = dict(count=0)
 
         num_violations = prev_violations["count"]
 
-        if growfast:
-            multiplier = 3 ** num_violations
-        else:
-            multiplier = 1
-
+        multiplier = 3 ** num_violations if growfast else 1
         max_duration = 8 * 3600
         duration = min(seconds * multiplier, max_duration)
 
@@ -1883,7 +1840,7 @@ class VDelay(Validator):
         prev_violations["duration"] = duration
         prev_violations["count"] += 1
 
-        with g.make_lock("record_violation", "lock-" + key, timeout=5, verbose=False):
+        with g.make_lock("record_violation", f"lock-{key}", timeout=5, verbose=False):
             existing = g.cache.get(key)
             if existing and existing["count"] > prev_violations["count"]:
                 g.log.warning("Tried to set %s to count=%d, but found existing=%d"
@@ -1895,8 +1852,7 @@ class VCommentIDs(Validator):
     def run(self, id_str):
         if id_str:
             try:
-                cids = [int(i, 36) for i in id_str.split(',')]
-                return cids
+                return [int(i, 36) for i in id_str.split(',')]
             except ValueError:
                 abort(400)
         return []
@@ -1915,7 +1871,7 @@ class CachedUser(object):
 
     def clear(self):
         if self.key and self.cache_prefix:
-            g.cache.delete(str(self.cache_prefix + "_" + self.key))
+            g.cache.delete(str(f"{self.cache_prefix}_{self.key}"))
 
 class VOneTimeToken(Validator):
     def __init__(self, model, param, *args, **kwargs):
@@ -1923,13 +1879,10 @@ class VOneTimeToken(Validator):
         Validator.__init__(self, param, *args, **kwargs)
 
     def run(self, key):
-        token = self.model.get_token(key)
-
-        if token:
+        if token := self.model.get_token(key):
             return token
-        else:
-            self.set_error(errors.EXPIRED)
-            return None
+        self.set_error(errors.EXPIRED)
+        return None
 
 class VOneOf(Validator):
     def __init__(self, param, options = (), *a, **kw):
@@ -1937,16 +1890,14 @@ class VOneOf(Validator):
         self.options = options
 
     def run(self, val):
-        if self.options and val not in self.options:
-            self.set_error(errors.INVALID_OPTION, code=400)
-            return self.default
-        else:
+        if not self.options or val in self.options:
             return val
+        self.set_error(errors.INVALID_OPTION, code=400)
+        return self.default
 
     def param_docs(self):
         return {
-            self.param: 'one of (%s)' % ', '.join("`%s`" % s
-                                                  for s in self.options),
+            self.param: ('one of (%s)' % ', '.join(f"`{s}`" for s in self.options))
         }
 
 
@@ -2011,8 +1962,9 @@ class VLocation(Validator):
         if not (country or region or metro):
             return None
 
-        if not (country and not (region or metro) or
-                (country and region and metro)):
+        if not (
+            country and not region and not metro or (country and region and metro)
+        ):
             # can target just country or country, region, and metro
             self.set_error(errors.INVALID_LOCATION, code=400)
         elif (country not in g.locations or
@@ -2025,9 +1977,7 @@ class VLocation(Validator):
 
 class VImageType(Validator):
     def run(self, img_type):
-        if not img_type in ('png', 'jpg'):
-            return 'png'
-        return img_type
+        return 'png' if img_type not in ('png', 'jpg') else img_type
 
     def param_docs(self):
         return {
@@ -2067,7 +2017,7 @@ class ValidEmails(Validator):
 
     def run(self, emails0):
         emails = set(self.separator.findall(emails0) if emails0 else [])
-        failures = set(e for e in emails if not self.email_re.match(e))
+        failures = {e for e in emails if not self.email_re.match(e)}
         emails = emails - failures
 
         # make sure the number of addresses does not exceed the max
@@ -2075,17 +2025,13 @@ class ValidEmails(Validator):
             # special case for 1: there should be no delineators at all, so
             # send back original string to the user
             if self.num == 1:
-                self.set_error(errors.BAD_EMAILS,
-                             {'emails': '"%s"' % emails0})
-            # else report the number expected
+                self.set_error(errors.BAD_EMAILS, {'emails': f'"{emails0}"'})
             else:
                 self.set_error(errors.TOO_MANY_EMAILS,
                              {'num': self.num})
-        # correct number, but invalid formatting
         elif failures:
             self.set_error(errors.BAD_EMAILS,
                          {'emails': ', '.join(failures)})
-        # no emails
         elif not emails:
             self.set_error(errors.NO_EMAILS)
         else:
@@ -2107,12 +2053,12 @@ class ValidEmailsOrExistingUnames(Validator):
         everything = set(ValidEmails.separator.findall(items) if items else [])
 
         # Use ValidEmails regex to divide the list into e-mail and other
-        emails = set(e for e in everything if ValidEmails.email_re.match(e))
+        emails = {e for e in everything if ValidEmails.email_re.match(e)}
         failures = everything - emails
 
         # Run the rest of the validator against the e-mails list
         ve = ValidEmails(self.param, self.num)
-        if len(emails) > 0:
+        if emails:
             ve.run(", ".join(emails))
 
         # ValidEmails will add to c.errors for us, so do nothing if that fails
@@ -2127,8 +2073,7 @@ class ValidEmailsOrExistingUnames(Validator):
                 if re.match('/u/', uname):
                     check = check[3:]
                 veu = VExistingUname(check)
-                account = veu.run(check)
-                if account:
+                if account := veu.run(check):
                     validusers.add(uname)
                     users.add(account)
 
@@ -2141,8 +2086,7 @@ class ValidEmailsOrExistingUnames(Validator):
                     if self.num == 1:
                         # We only wanted one, and we got it as an e-mail,
                         # so complain.
-                        self.set_error(errors.BAD_EMAILS,
-                                       {"emails": '"%s"' % items})
+                        self.set_error(errors.BAD_EMAILS, {"emails": f'"{items}"'})
                     else:
                         # Too many total
                         self.set_error(errors.TOO_MANY_EMAILS,
@@ -2161,11 +2105,12 @@ class VCnameDomain(Validator):
     domain_re  = re.compile(r'\A([\w\-_]+\.)+[\w]+\Z')
 
     def run(self, domain):
-        if (domain
-            and (not self.domain_re.match(domain)
-                 or domain.endswith('.' + g.domain)
-                 or domain.endswith('.' + g.media_domain)
-                 or len(domain) > 300)):
+        if domain and (
+            not self.domain_re.match(domain)
+            or domain.endswith(f'.{g.domain}')
+            or domain.endswith(f'.{g.media_domain}')
+            or len(domain) > 300
+        ):
             self.set_error(errors.BAD_CNAME)
         elif domain:
             try:
@@ -2219,10 +2164,11 @@ class VDestination(Validator):
         dm = c.domain or "[unknown]"
         cn = c.cname or "[unknown]"
 
-        log_text("invalid redirect",
-                 "%s attempted to redirect from %s to %s with domain %s and cname %s"
-                      % (ip, fp, dest, dm, cn),
-                 "info")
+        log_text(
+            "invalid redirect",
+            f"{ip} attempted to redirect from {fp} to {dest} with domain {dm} and cname {cn}",
+            "info",
+        )
 
         return "/"
 
@@ -2448,7 +2394,7 @@ class VOneTimePassword(Validator):
         # make sure they're not trying this too much
         if not g.disable_ratelimit:
             current_password = totp.make_totp(secret)
-            key = "otp-tries-" + current_password
+            key = f"otp-tries-{current_password}"
             g.cache.add(key, 0)
             recent_attempts = g.cache.incr(key)
             if recent_attempts > self.ratelimit:
@@ -2469,8 +2415,7 @@ class VOAuth2ClientID(VRequired):
         VRequired.__init__(self, param, errors.OAUTH2_INVALID_CLIENT, *a, **kw)
 
     def run(self, client_id):
-        client_id = VRequired.run(self, client_id)
-        if client_id:
+        if client_id := VRequired.run(self, client_id):
             client = OAuth2Client.get_token(client_id)
             if client and not getattr(client, 'deleted', False):
                 return client
@@ -2485,9 +2430,7 @@ class VOAuth2ClientDeveloper(VOAuth2ClientID):
 
     def run(self, client_id):
         client = super(VOAuth2ClientDeveloper, self).run(client_id)
-        if not client or not client.has_developer(c.user):
-            return self.error()
-        return client
+        return client if client and client.has_developer(c.user) else self.error()
 
 class VOAuth2Scope(VRequired):
     default_param = "scope"
@@ -2495,8 +2438,7 @@ class VOAuth2Scope(VRequired):
         VRequired.__init__(self, param, errors.OAUTH2_INVALID_SCOPE, *a, **kw)
 
     def run(self, scope):
-        scope = VRequired.run(self, scope)
-        if scope:
+        if scope := VRequired.run(self, scope):
             parsed_scope = OAuth2Scope(scope)
             if parsed_scope.is_valid():
                 return parsed_scope
@@ -2508,18 +2450,17 @@ class VOAuth2RefreshToken(Validator):
         Validator.__init__(self, param, None, *a, **kw)
 
     def run(self, refresh_token_id):
-        if refresh_token_id:
-            try:
-                token = OAuth2RefreshToken._byID(refresh_token_id)
-            except tdb_cassandra.NotFound:
-                self.set_error(errors.OAUTH2_INVALID_REFRESH_TOKEN)
-                return None
-            if not token.check_valid():
-                self.set_error(errors.OAUTH2_INVALID_REFRESH_TOKEN)
-                return None
-            return token
-        else:
+        if not refresh_token_id:
             return None
+        try:
+            token = OAuth2RefreshToken._byID(refresh_token_id)
+        except tdb_cassandra.NotFound:
+            self.set_error(errors.OAUTH2_INVALID_REFRESH_TOKEN)
+            return None
+        if not token.check_valid():
+            self.set_error(errors.OAUTH2_INVALID_REFRESH_TOKEN)
+            return None
+        return token
 
 class VPermissions(Validator):
     types = dict(
@@ -2547,11 +2488,10 @@ class VJSON(Validator):
     def run(self, json_str):
         if not json_str:
             return self.set_error('JSON_PARSE_ERROR', code=400)
-        else:
-            try:
-                return json.loads(json_str)
-            except ValueError:
-                return self.set_error('JSON_PARSE_ERROR', code=400)
+        try:
+            return json.loads(json_str)
+        except ValueError:
+            return self.set_error('JSON_PARSE_ERROR', code=400)
 
     def param_docs(self):
         return {
@@ -2570,23 +2510,17 @@ class VValidatedJSON(VJSON):
             if not isinstance(data, list):
                 raise RedditError('JSON_INVALID', code=400)
 
-            validated_data = []
-            for item in data:
-                validated_data.append(self.spec.run(item))
-            return validated_data
+            return [self.spec.run(item) for item in data]
 
         def spec_docs(self):
-            spec_lines = []
-            spec_lines.append('[')
+            spec_lines = ['[']
             if hasattr(self.spec, 'spec_docs'):
                 array_docs = self.spec.spec_docs()
             else:
                 array_docs = self.spec.param_docs()[self.spec.param]
-            for line in array_docs.split('\n'):
-                spec_lines.append('  ' + line)
+            spec_lines.extend(f'  {line}' for line in array_docs.split('\n'))
             spec_lines[-1] += ','
-            spec_lines.append('  ...')
-            spec_lines.append(']')
+            spec_lines.extend(('  ...', ']'))
             return '\n'.join(spec_lines)
 
 
@@ -2616,18 +2550,17 @@ class VValidatedJSON(VJSON):
                 if hasattr(validator, 'spec_docs'):
                     spec_docs[key] = validator.spec_docs()
                 elif hasattr(validator, 'param_docs'):
-                    spec_docs.update(validator.param_docs())
+                    spec_docs |= validator.param_docs()
                     if validator.docs:
                         spec_docs.update(validator.docs)
 
             # generate markdown json schema docs
-            spec_lines = []
-            spec_lines.append('{')
+            spec_lines = ['{']
             for key in sorted(spec_docs.keys()):
                 key_docs = spec_docs[key]
                 # indent any new lines
                 key_docs = key_docs.replace('\n', '\n  ')
-                spec_lines.append('  "%s": %s,' % (key, key_docs))
+                spec_lines.append(f'  "{key}": {key_docs},')
             spec_lines.append('}')
             return '\n'.join(spec_lines)
 
@@ -2653,9 +2586,7 @@ class VValidatedJSON(VJSON):
         spec_md = self.spec.spec_docs()
 
         # indent for code formatting
-        spec_md = '\n'.join(
-            '    ' + line for line in spec_md.split('\n')
-        )
+        spec_md = '\n'.join(f'    {line}' for line in spec_md.split('\n'))
         return spec_md
 
     def param_docs(self):
@@ -2674,9 +2605,9 @@ class VMultiPath(Validator):
         self.kinds = tup(kinds or ('f', 'm'))
 
     @classmethod
-    def normalize(self, path):
+    def normalize(cls, path):
         if path[0] != '/':
-            path = '/' + path
+            path = f'/{path}'
         path = path.lower().rstrip('/')
         return path
 
@@ -2701,8 +2632,7 @@ class VMultiPath(Validator):
         try:
             require(multi_name_rx.match(name))
         except RequirementException:
-            invalid_char = multi_name_chars_rx.search(name)
-            if invalid_char:
+            if invalid_char := multi_name_chars_rx.search(name):
                 char = invalid_char.group()
                 if char == ' ':
                     reason = _('no spaces allowed')

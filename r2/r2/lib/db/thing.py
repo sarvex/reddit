@@ -59,7 +59,7 @@ def obj_id(things):
     return tuple(t if isinstance(t, (int, long)) else t._id for t in things)
 
 def thing_prefix(cls_name, id=None):
-    p = cls_name + '_'
+    p = f'{cls_name}_'
     if id:
         p += str(id)
     return p
@@ -105,7 +105,7 @@ class DataThing(object):
             if make_dirty and hasattr(self, attr):
                 old_val = getattr(self, attr)
             object.__setattr__(self, attr, val)
-            if not attr in self._base_props:
+            if attr not in self._base_props:
                 return
         else:
             old_val = self._t.get(attr, self._defaults.get(attr))
@@ -141,26 +141,18 @@ class DataThing(object):
         except AttributeError:
             cl = "???"
 
-        if self._loaded:
-            nl = "it IS loaded"
-        else:
-            nl = "it is NOT loaded"
-
+        nl = "it IS loaded" if self._loaded else "it is NOT loaded"
         try:
             id_str = "%d" % _id
         except TypeError:
             id_str = "%r" % _id
 
-        descr = '%s(%s).%s' % (cl, id_str, attr)
+        descr = f'{cl}({id_str}).{attr}'
 
         essentials = object.__getattribute__(self, "_essentials")
         deleted = object.__getattribute__(self, "_deleted")
 
-        if deleted:
-            nl += " and IS deleted."
-        else:
-            nl += " and is NOT deleted."
-
+        nl += " and IS deleted." if deleted else " and is NOT deleted."
         if attr in essentials and not deleted:
             g.log.error("%s not found; %s forcing reload.", descr, nl)
             self._load()
@@ -170,7 +162,7 @@ class DataThing(object):
             except KeyError:
                 g.log.error("reload of %s didn't help.", descr)
 
-        raise AttributeError, '%s not found; %s' % (descr, nl)
+        raise (AttributeError, f'{descr} not found; {nl}')
 
     def _cache_key(self):
         return thing_prefix(self.__class__.__name__, self._id)
@@ -223,7 +215,7 @@ class DataThing(object):
             else:
                 just_created = False
 
-            lock = g.make_lock("thing_commit", 'commit_' + self._fullname)
+            lock = g.make_lock("thing_commit", f'commit_{self._fullname}')
             lock.acquire()
 
             if not just_created and not self._sync_latest():
@@ -328,7 +320,7 @@ class DataThing(object):
                        (prop, self, self._int_props, self._data_int_props))
                 raise ValueError, msg
 
-        with g.make_lock("thing_commit", 'commit_' + self._fullname):
+        with g.make_lock("thing_commit", f'commit_{self._fullname}'):
             self._sync_latest()
             old_val = getattr(self, prop)
             if self._defaults.has_key(prop) and self._defaults[prop] == old_val:
@@ -375,8 +367,10 @@ class DataThing(object):
 
         def count_found(ret, still_need):
             cls._cache.stats.cache_report(
-                hits=len(ret), misses=len(still_need),
-                cache_name='sgm.%s' % cls.__name__)
+                hits=len(ret),
+                misses=len(still_need),
+                cache_name=f'sgm.{cls.__name__}',
+            )
 
         if not cls._cache.stats:
             count_found = None
@@ -397,12 +391,13 @@ class DataThing(object):
             if i not in bases:
                 missing.append(i)
             elif bases[i] and bases[i]._id != i:
-                g.log.error("thing.py: Doppleganger on byID: %s got %s for %s" %
-                            (cls.__name__, bases[i]._id, i))
+                g.log.error(
+                    f"thing.py: Doppleganger on byID: {cls.__name__} got {bases[i]._id} for {i}"
+                )
                 bases[i] = items_db([i]).values()[0]
                 bases[i]._cache_myself()
         if missing and not ignore_missing:
-            raise NotFound, '%s %s' % (cls.__name__, missing)
+            raise (NotFound, f'{cls.__name__} {missing}')
         for i in missing:
             ids.remove(i)
 
@@ -504,19 +499,19 @@ class DataThing(object):
         raise NotImplementedError()
 
     @classmethod
-    def _build(*a, **kw):
+    def _build(cls, **kw):
         raise NotImplementedError()
 
-    def _get_data(*a, **kw):
+    def _get_data(self, **kw):
         raise NotImplementedError()
 
-    def _set_data(*a, **kw):
+    def _set_data(self, **kw):
         raise NotImplementedError()
 
-    def _incr_data(*a, **kw):
+    def _incr_data(self, **kw):
         raise NotImplementedError()
 
-    def _get_item(*a, **kw):
+    def _get_item(self, **kw):
         raise NotImplementedError
 
     def _create(self):
@@ -525,24 +520,24 @@ class DataThing(object):
         self._created = True
 
 class ThingMeta(type):
-    def __init__(cls, name, bases, dct):
-        if name == 'Thing' or hasattr(cls, '_nodb') and cls._nodb: return
+    def __init__(self, name, bases, dct):
+        if name == 'Thing' or hasattr(self, '_nodb') and self._nodb: return
         #print "checking thing", name
 
         #TODO exceptions
-        cls._type_name = name.lower()
+        self._type_name = name.lower()
         try:
-            cls._type_id = tdb.types_name[cls._type_name].type_id
+            self._type_id = tdb.types_name[self._type_name].type_id
         except KeyError:
-            raise KeyError, 'is the thing database %s defined?' % name
+            raise (KeyError, f'is the thing database {name} defined?')
 
         global thing_types
-        thing_types[cls._type_id] = cls
+        thing_types[self._type_id] = self
 
-        super(ThingMeta, cls).__init__(name, bases, dct)
+        super(ThingMeta, self).__init__(name, bases, dct)
     
-    def __repr__(cls):
-        return '<thing: %s>' % cls._type_name
+    def __repr__(self):
+        return f'<thing: {self._type_name}>'
 
 class Thing(DataThing):
     __metaclass__ = ThingMeta
@@ -579,8 +574,7 @@ class Thing(DataThing):
             self.__setattr__(k, v, not self._created)
         
     def __repr__(self):
-        return '<%s %s>' % (self.__class__.__name__,
-                            self._id if self._created else '[unsaved]')
+        return f"<{self.__class__.__name__} {self._id if self._created else '[unsaved]'}>"
 
     def _set_id(self, thing_id):
         if not self._created:
@@ -647,29 +641,32 @@ class Thing(DataThing):
 
 
 class RelationMeta(type):
-    def __init__(cls, name, bases, dct):
+    def __init__(self, name, bases, dct):
         if name == 'RelationCls': return
         #print "checking relation", name
 
-        cls._type_name = name.lower()
+        self._type_name = name.lower()
         try:
-            cls._type_id = tdb.rel_types_name[cls._type_name].type_id
+            self._type_id = tdb.rel_types_name[self._type_name].type_id
         except KeyError:
-            raise KeyError, 'is the relationship database %s defined?' % name
+            raise (KeyError, f'is the relationship database {name} defined?')
 
         global rel_types
-        rel_types[cls._type_id] = cls
+        rel_types[self._type_id] = self
 
-        super(RelationMeta, cls).__init__(name, bases, dct)
+        super(RelationMeta, self).__init__(name, bases, dct)
 
-    def __repr__(cls):
-        return '<relation: %s>' % cls._type_name
+    def __repr__(self):
+        return f'<relation: {self._type_name}>'
 
 def Relation(type1, type2, denorm1 = None, denorm2 = None):
+
+
+
     class RelationCls(DataThing):
         __metaclass__ = RelationMeta
         if not (issubclass(type1, Thing) and issubclass(type2, Thing)):
-                raise TypeError('Relation types must be subclass of %s' % Thing)
+            raise TypeError(f'Relation types must be subclass of {Thing}')
 
         _type1 = type1
         _type2 = type2
@@ -715,10 +712,7 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
             DataThing.__init__(self)
 
             def id_and_obj(in_thing):
-                if isinstance(in_thing, (int, long)):
-                    return in_thing
-                else:
-                    return in_thing._id
+                return in_thing if isinstance(in_thing, (int, long)) else in_thing._id
 
             with self.safe_set_attr:
                 if id:
@@ -801,15 +795,15 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
             self._fast_cache.set(self._fast_cache_key(), None)
             #temporarily set this property so the rest of this request
             #know it's deleted. save -> unsave, hide -> unhide
-            self._name = 'un' + self._name
+            self._name = f'un{self._name}'
 
         @classmethod
         def _fast_query(cls, thing1s, thing2s, name, data=True, eager_load=True,
-                        thing_data=False):
+                                thing_data=False):
             """looks up all the relationships between thing1_ids and
                thing2_ids and caches them"""
 
-            cache_key_lookup = dict()
+            cache_key_lookup = {}
 
             # We didn't find these keys in the cache, look them up in the
             # database
@@ -846,8 +840,8 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
                 return rel_ids
 
             # make lookups for thing ids and names
-            thing1_dict = dict((t._id, t) for t in tup(thing1s))
-            thing2_dict = dict((t._id, t) for t in tup(thing2s))
+            thing1_dict = {t._id: t for t in tup(thing1s)}
+            thing2_dict = {t._id: t for t in tup(thing2s)}
 
             names = map(str, tup(name))
 
@@ -902,6 +896,7 @@ def Relation(type1, type2, denorm1 = None, denorm2 = None):
             return Relations(cls, *a, **kw)
 
 
+
     return RelationCls
 Relation._type_prefix = 'r'
 
@@ -947,10 +942,7 @@ class Query(object):
 
     def _reverse(self):
         for s in self._sort:
-            if isinstance(s, operators.asc):
-                s.__class__ = operators.desc
-            else:
-                s.__class__ = operators.asc
+            s.__class__ = operators.desc if isinstance(s, operators.asc) else operators.asc
 
     def _list(self, data = False):
         if data:
@@ -961,22 +953,12 @@ class Query(object):
     def _dir(self, thing, reverse):
         ors = []
 
-        # this fun hack lets us simplify the query on /r/all 
-        # for postgres-9 compatibility. please remove it when
-        # /r/all is precomputed.
-        sorts = range(len(self._sort))
-        if self._filter_primary_sort_only:
-            sorts = [0]
-
+        sorts = [0] if self._filter_primary_sort_only else range(len(self._sort))
         #for each sort add and a comparison operator
         for i in sorts:
             s = self._sort[i]
 
-            if isinstance(s, operators.asc):
-                op = operators.gt
-            else:
-                op = operators.lt
-
+            op = operators.gt if isinstance(s, operators.asc) else operators.lt
             if reverse:
                 op = operators.gt if op == operators.lt else operators.lt
 
@@ -1002,10 +984,10 @@ class Query(object):
         return self._cursor().rowcount()
 
 
-    def _filter(*a, **kw):
+    def _filter(self, **kw):
         raise NotImplementedError
 
-    def _cursor(*a, **kw):
+    def _cursor(self, **kw):
         raise NotImplementedError
 
     def _iden(self):
@@ -1030,34 +1012,34 @@ class Query(object):
         names = lst = []
 
         names = self._cache.get(self._iden()) if self._read_cache else None
-        if names is None and not self._write_cache:
-            # it wasn't in the cache, and we're not going to
-            # replace it, so just hit the db
-            lst = _retrieve()
-        elif names is None and self._write_cache:
-            # it's not in the cache, and we have the power to
-            # update it, which we should do in a lock to prevent
-            # concurrent requests for the same data
-            with g.make_lock("thing_query", "lock_%s" % self._iden()):
-                # see if it was set while we were waiting for our
-                # lock
-                if self._read_cache:
-                    names = self._cache.get(self._iden(), allow_local=False)
-                else:
-                    names = None
+        if names is None:
+            if not self._write_cache:
+                # it wasn't in the cache, and we're not going to
+                # replace it, so just hit the db
+                lst = _retrieve()
+            elif self._write_cache:
+                        # it's not in the cache, and we have the power to
+                        # update it, which we should do in a lock to prevent
+                        # concurrent requests for the same data
+                with g.make_lock("thing_query", f"lock_{self._iden()}"):
+                    # see if it was set while we were waiting for our
+                    # lock
+                    if self._read_cache:
+                        names = self._cache.get(self._iden(), allow_local=False)
+                    else:
+                        names = None
 
-                if names is None:
-                    lst = _retrieve()
-                    _names = [x._fullname for x in lst]
-                    self._cache.set(self._iden(), _names, self._cache_time)
+                    if names is None:
+                        lst = _retrieve()
+                        _names = [x._fullname for x in lst]
+                        self._cache.set(self._iden(), _names, self._cache_time)
 
         if names and not lst:
             # we got our list of names from the cache, so we need to
             # turn them back into Things
             lst = Thing._by_fullname(names, data = self._data, return_dict = False)
 
-        for item in lst:
-            yield item
+        yield from lst
 
 class Things(Query):
     def __init__(self, kind, *rules, **kw):
@@ -1083,11 +1065,7 @@ class Things(Query):
                   self._limit,
                   self._offset,
                   self._rules)
-        if self._use_data:
-            c = tdb.find_data(*params)
-        else:
-            c = tdb.find_things(*params)
-
+        c = tdb.find_data(*params) if self._use_data else tdb.find_things(*params)
         #TODO simplfy this! get_cols is always false?
         #called on a bunch of rows to fetch their properties in batch
         def row_fn(rows):
@@ -1170,7 +1148,7 @@ class MultiCursor(object):
         if not self._cursor:
             self._cursor = self._execute(*self._execute_params)
 
-        return [i for i in self._cursor]
+        return list(self._cursor)
 
 class MergeCursor(MultiCursor):
     def _execute(self, cursors, sorts):

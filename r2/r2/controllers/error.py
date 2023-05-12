@@ -139,12 +139,11 @@ class ErrorController(RedditController):
         c.site = DefaultSR()
         if 'usable_error_content' in request.environ:
             return request.environ['usable_error_content']
-        else:
-            res = pages.RedditError(
-                title=_("forbidden (%(domain)s)") % dict(domain=g.domain),
-                message=_("you are not allowed to do that"),
-                explanation=request.GET.get('explanation'))
-            return res.render()
+        res = pages.RedditError(
+            title=_("forbidden (%(domain)s)") % dict(domain=g.domain),
+            message=_("you are not allowed to do that"),
+            explanation=request.GET.get('explanation'))
+        return res.render()
 
     def send404(self):
         if 'usable_error_content' in request.environ:
@@ -167,8 +166,7 @@ class ErrorController(RedditController):
         )
 
     def send503(self):
-        retry_after = request.environ.get("retry_after")
-        if retry_after:
+        if retry_after := request.environ.get("retry_after"):
             response.headers["Retry-After"] = str(retry_after)
         return request.environ['usable_error_content']
 
@@ -197,9 +195,9 @@ class ErrorController(RedditController):
                 c.site = Subreddit._by_name(srname)
 
             if request.GET.has_key('allow_framing'):
-                c.allow_framing = bool(request.GET['allow_framing'] == '1')
+                c.allow_framing = request.GET['allow_framing'] == '1'
 
-            if code in (204, 304):
+            if code in {204, 304}:
                 # NEVER return a content body on 204/304 or downstream
                 # caches may become very confused.
                 if request.GET.has_key('x-sup-id'):

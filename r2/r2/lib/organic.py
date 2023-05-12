@@ -46,12 +46,8 @@ def cached_organic_links(*sr_ids):
     #potentially add an up and coming link
     if random.choice((True, False)) and sr_ids:
         sr_id = random.choice(sr_ids)
-        fnames = normalized_hot([sr_id])
-        if fnames:
-            if len(fnames) == 1:
-                new_item = fnames[0]
-            else:
-                new_item = random.choice(fnames[1:4])
+        if fnames := normalized_hot([sr_id]):
+            new_item = fnames[0] if len(fnames) == 1 else random.choice(fnames[1:4])
             link_names.insert(0, new_item)
 
     return link_names

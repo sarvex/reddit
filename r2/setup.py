@@ -58,7 +58,7 @@ setup(
     name="r2",
     version="",
     install_requires=[
-        "webob==1.0.8",
+        "webob==1.8.8",
         "webtest<=1.4.3",  # anything newer requires WebOb>=1.2.0
         "Pylons==0.9.7",
         "Routes==1.11",
